@@ -162,73 +162,82 @@
     let telegramUserId = null;
     let userName = 'Пользователь';
     
-    // Пробуем получить из initDataUnsafe (если доступно)
+    // Способ 1: Пробуем получить из initDataUnsafe (самый надёжный)
     const user = tg.initDataUnsafe?.user;
-    console.log('initDataUnsafe.user:', user);
+    console.log('1. initDataUnsafe.user:', user);
     
     if (user?.id) {
       telegramUserId = user.id;
       userName = user.first_name || 'Пользователь';
       console.log('✅ Получен user из initDataUnsafe');
     } else {
-      // Пробуем получить initData из разных источников
+      // Способ 2: Парсим tg.initData
       let initData = tg.initData;
+      console.log('2. tg.initData:', initData ? 'есть' : 'пусто');
       
-      // Если initData пустой, пробуем получить из URL (tgWebAppData)
+      // Способ 3: Получаем из URL (hash или query)
       if (!initData) {
-        // Пробуем из query параметров
-        const urlParams = new URLSearchParams(window.location.search);
-        initData = urlParams.get('tgWebAppData') || '';
+        const fullUrl = window.location.href;
+        console.log('3. window.location.href:', fullUrl);
         
-        // Если не нашли, пробуем из hash
-        if (!initData && window.location.hash) {
-          const hashMatch = window.location.hash.match(/tgWebAppData=([^&]+)/);
-          if (hashMatch) {
-            initData = decodeURIComponent(hashMatch[1]);
-          }
+        // Ищем tgWebAppData в hash
+        if (window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          initData = hashParams.get('tgWebAppData') || '';
+          console.log('4. tgWebAppData из hash:', initData ? 'найден' : 'не найден');
         }
         
-        console.log('initData из URL:', initData ? 'найден' : 'не найден');
+        // Ищем в query параметрах
+        if (!initData) {
+          const urlParams = new URLSearchParams(window.location.search);
+          initData = urlParams.get('tgWebAppData') || '';
+          console.log('5. tgWebAppData из query:', initData ? 'найден' : 'не найден');
+        }
+        
+        // Пробуем найти в самом URL строке
+        if (!initData) {
+          const tgWebAppDataMatch = fullUrl.match(/tgWebAppData=([^&#]+)/);
+          if (tgWebAppDataMatch) {
+            initData = decodeURIComponent(tgWebAppDataMatch[1]);
+            console.log('6. tgWebAppData из regex:', initData ? 'найден' : 'не найден');
+          }
+        }
       }
-      
-      console.log('initData:', initData);
-      console.log('initDataUnsafe:', tg.initDataUnsafe);
-      console.log('window.location:', window.location.href);
       
       if (initData) {
         try {
-          // initData может быть в формате query string
+          // Парсим query string
           const params = new URLSearchParams(initData);
-          const userStr = params.get('user');
-          console.log('user из initData (raw):', userStr);
+          let userStr = params.get('user');
+          console.log('7. user из initData (raw):', userStr ? 'найден' : 'не найден');
           
           if (userStr) {
-            // Может быть двойное кодирование, пробуем декодировать
+            // Декодируем (может быть двойное кодирование)
             let decoded = userStr;
-            try {
-              decoded = decodeURIComponent(userStr);
-              // Если это JSON строка, пробуем ещё раз декодировать
-              if (decoded.includes('%')) {
-                decoded = decodeURIComponent(decoded);
+            for (let i = 0; i < 3; i++) {
+              try {
+                const temp = decodeURIComponent(decoded);
+                if (temp === decoded) break; // Больше не декодируется
+                decoded = temp;
+              } catch (e) {
+                break;
               }
-            } catch (e) {
-              console.warn('Ошибка декодирования, пробуем как есть:', e);
             }
             
-            console.log('decoded user:', decoded);
+            console.log('8. decoded user:', decoded);
             const userData = JSON.parse(decoded);
             telegramUserId = userData.id;
             userName = userData.first_name || 'Пользователь';
-            console.log('✅ Распарсен user из initData:', userData);
+            console.log('✅ Распарсен user:', userData);
           }
         } catch (e) {
-          console.error('❌ Ошибка парсинга initData:', e);
+          console.error('❌ Ошибка парсинга:', e);
         }
       }
     }
     
-    console.log('telegramUserId:', telegramUserId);
-    console.log('userName:', userName);
+    console.log('Итоговый telegramUserId:', telegramUserId);
+    console.log('Итоговый userName:', userName);
 
     // Обновляем приветствие
     document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
@@ -240,8 +249,34 @@
 
       // Если не удалось получить user_id, пробуем через бэкенд с initData
       if (!telegramUserId) {
-        const initData = tg.initData;
-        console.log('Пробуем fallback через бэкенд, initData:', initData);
+        // Пробуем получить initData из всех возможных источников
+        let initData = tg.initData;
+        
+        if (!initData) {
+          // Пробуем из hash
+          const hash = window.location.hash;
+          if (hash) {
+            const hashParams = new URLSearchParams(hash.substring(1));
+            initData = hashParams.get('tgWebAppData') || '';
+          }
+        }
+        
+        if (!initData) {
+          // Пробуем из query
+          const urlParams = new URLSearchParams(window.location.search);
+          initData = urlParams.get('tgWebAppData') || '';
+        }
+        
+        if (!initData) {
+          // Пробуем найти в полном URL через regex
+          const fullUrl = window.location.href;
+          const match = fullUrl.match(/tgWebAppData=([^&#]+)/);
+          if (match) {
+            initData = decodeURIComponent(match[1]);
+          }
+        }
+        
+        console.log('Пробуем fallback через бэкенд, initData:', initData ? 'найден' : 'пустой');
         
         if (initData) {
           try {
@@ -268,7 +303,8 @@
             console.error('Ошибка получения user_id через бэкенд:', e);
           }
         } else {
-          console.error('initData пустой!');
+          console.error('initData пустой во всех источниках!');
+          console.error('Проверь, что мини-приложение открыто через кнопку WebApp в Telegram боте.');
         }
       }
 
