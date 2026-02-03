@@ -257,7 +257,7 @@ def miniapp_expenses(
     
     rows = (
         db.execute(
-            """
+            text("""
             SELECT e.id,
                    e.amount_cents,
                    e.description,
@@ -268,7 +268,7 @@ def miniapp_expenses(
             WHERE e.user_id = :user_id
             ORDER BY e.occurred_at DESC, e.id DESC
             LIMIT :limit
-            """,
+            """),
             {"user_id": user.id, "limit": limit},
         )
         .mappings()
