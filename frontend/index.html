@@ -273,7 +273,7 @@
       }
 
       if (!telegramUserId) {
-        loadingEl.innerHTML = 'Ошибка: не удалось определить пользователя.<br><br>Открой приложение через Telegram бота командой /app.';
+        loadingEl.innerHTML = 'Не удалось определить пользователя.';
         console.error('❌ Не удалось получить telegramUserId. Проверь логи выше.');
         return;
       }
