@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from .database import SessionLocal, init_db
 from . import crud
+from .models import User
 
 app = FastAPI(title="Expense Tracker Backend", version="0.1.0")
 
@@ -171,12 +172,26 @@ def create_expense(
 
 
 @app.get("/miniapp/expenses", response_class=JSONResponse)
-def miniapp_expenses(limit: int = 10, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    """Возвращает последние расходы для мини‑приложения.
+def miniapp_expenses(
+    telegram_user_id: int,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Возвращает последние расходы конкретного пользователя для мини‑приложения.
 
     Дата/время `occurred_at` конвертируется в строку формата \"DD.MM.YYYY HH:MM\"
     для отображения пользователю.
     """
+    # Находим пользователя по telegram_user_id
+    user = (
+        db.query(User)
+        .filter(User.telegram_user_id == telegram_user_id)
+        .first()
+    )
+    
+    if not user:
+        return []
+    
     rows = (
         db.execute(
             """
@@ -187,10 +202,11 @@ def miniapp_expenses(limit: int = 10, db: Session = Depends(get_db)) -> list[dic
                    c.name AS category_name
             FROM expenses e
             LEFT JOIN categories c ON c.id = e.category_id
-            ORDER BY e.id DESC
+            WHERE e.user_id = :user_id
+            ORDER BY e.occurred_at DESC, e.id DESC
             LIMIT :limit
             """,
-            {"limit": limit},
+            {"user_id": user.id, "limit": limit},
         )
         .mappings()
         .all()

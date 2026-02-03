@@ -2,106 +2,232 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Расходы за сегодня</title>
+  <title>Мои расходы</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+    
     body {
       margin: 0;
       padding: 16px;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--tg-theme-bg-color, #ffffff);
       color: var(--tg-theme-text-color, #000000);
+      min-height: 100vh;
     }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
     h1 {
-      font-size: 22px;
-      margin-bottom: 8px;
-    }
-    p {
-      margin-top: 0;
-      margin-bottom: 12px;
-    }
-    img {
-      max-width: 100%;
-      border-radius: 12px;
-      margin-bottom: 12px;
-    }
-    .expense {
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: rgba(0,0,0,0.03);
-      margin-bottom: 6px;
-      font-size: 14px;
-    }
-    .expense strong {
+      font-size: 24px;
+      margin: 0 0 8px 0;
       font-weight: 600;
     }
-    #empty {
-      font-size: 14px;
-      opacity: 0.7;
-    }
-    button {
-      margin-top: 12px;
-      padding: 10px 16px;
+    
+    .greeting {
       font-size: 16px;
-      border-radius: 8px;
+      color: var(--tg-theme-hint-color, #999999);
+      margin-bottom: 16px;
+    }
+    
+    .image-container {
+      text-align: center;
+      margin: 20px 0;
+    }
+    
+    img {
+      max-width: 200px;
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .expenses-section {
+      margin-top: 24px;
+    }
+    
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    
+    .expense {
+      padding: 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      margin-bottom: 8px;
+      font-size: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    
+    .expense-left {
+      flex: 1;
+    }
+    
+    .expense-amount {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color, #2a9df4);
+      margin-bottom: 4px;
+    }
+    
+    .expense-category {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color, #999999);
+      margin-bottom: 4px;
+    }
+    
+    .expense-description {
+      font-size: 14px;
+      color: var(--tg-theme-text-color, #000000);
+    }
+    
+    .expense-date {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color, #999999);
+      white-space: nowrap;
+      margin-left: 12px;
+    }
+    
+    #empty {
+      text-align: center;
+      padding: 40px 20px;
+      font-size: 14px;
+      color: var(--tg-theme-hint-color, #999999);
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: var(--tg-theme-hint-color, #999999);
+    }
+    
+    button {
+      margin-top: 20px;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 12px;
       border: none;
       background: var(--tg-theme-button-color, #2a9df4);
       color: var(--tg-theme-button-text-color, #ffffff);
       cursor: pointer;
+      width: 100%;
+      font-weight: 500;
+    }
+    
+    button:active {
+      opacity: 0.8;
     }
   </style>
 </head>
 <body>
-  <h1>Привет!</h1>
-  <p>Это мини‑приложение показывает последние расходы, которые ты отправила боту.</p>
+  <div class="header">
+    <h1>💰 Мои расходы</h1>
+    <div class="greeting" id="greeting">Загрузка...</div>
+  </div>
 
-  <!-- маленькая картинка (положи файл, например, frontend/piggy.png) -->
-  <img src="/static/piggy.png" alt="Копилка" />
+  <div class="image-container">
+    <img src="/static/piggy.png" alt="Копилка" />
+  </div>
 
-  <div id="expenses"></div>
-  <div id="empty" style="display:none;">Пока расходов нет. Отправь что‑нибудь боту.</div>
+  <div class="expenses-section">
+    <div class="section-title">Последние расходы</div>
+    <div id="loading" class="loading">Загрузка расходов...</div>
+    <div id="expenses"></div>
+    <div id="empty" style="display:none;">
+      Пока расходов нет.<br>
+      Отправь боту расход в формате:<br>
+      <strong>сумма // описание // категория</strong>
+    </div>
+  </div>
 
   <button id="close-btn">Закрыть</button>
 
   <script>
     const tg = window.Telegram.WebApp;
     tg.ready();
+    tg.expand();
+
+    // Получаем данные пользователя из Telegram
+    const user = tg.initDataUnsafe?.user;
+    const userName = user?.first_name || 'Пользователь';
+    const userLastName = user?.last_name || '';
+    const fullName = userLastName ? `${userName} ${userLastName}` : userName;
+    const telegramUserId = user?.id;
+
+    // Обновляем приветствие
+    document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
 
     async function loadExpenses() {
-      try {
-        const res = await fetch("/miniapp/expenses?limit=10");
-        const data = await res.json();
-        const container = document.getElementById("expenses");
-        const empty = document.getElementById("empty");
+      const loadingEl = document.getElementById('loading');
+      const container = document.getElementById('expenses');
+      const empty = document.getElementById('empty');
 
-        container.innerHTML = "";
+      if (!telegramUserId) {
+        loadingEl.textContent = 'Ошибка: не удалось определить пользователя';
+        return;
+      }
+
+      try {
+        loadingEl.style.display = 'block';
+        container.innerHTML = '';
+        empty.style.display = 'none';
+
+        const res = await fetch(`/miniapp/expenses?telegram_user_id=${telegramUserId}&limit=50`);
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        loadingEl.style.display = 'none';
 
         if (!data || data.length === 0) {
-          empty.style.display = "block";
+          empty.style.display = 'block';
           return;
-        } else {
-          empty.style.display = "none";
         }
 
         data.forEach((item) => {
-          const div = document.createElement("div");
-          div.className = "expense";
+          const div = document.createElement('div');
+          div.className = 'expense';
+          
           const amountRub = (item.amount_cents || 0) / 100;
-          const cat = item.category_name || "Без категории";
-          const desc = item.description || "";
-          div.innerHTML = `<strong>${amountRub.toFixed(2)} ₽</strong> · ${cat}<br>${desc}`;
+          const cat = item.category_name || 'Без категории';
+          const desc = item.description || '';
+          const date = item.occurred_at || '';
+          
+          div.innerHTML = `
+            <div class="expense-left">
+              <div class="expense-amount">${amountRub.toFixed(2)} ₽</div>
+              <div class="expense-category">${cat}</div>
+              ${desc ? `<div class="expense-description">${desc}</div>` : ''}
+            </div>
+            ${date ? `<div class="expense-date">${date}</div>` : ''}
+          `;
+          
           container.appendChild(div);
         });
       } catch (e) {
-        console.error(e);
+        console.error('Ошибка загрузки расходов:', e);
+        loadingEl.textContent = 'Ошибка загрузки расходов. Попробуй позже.';
       }
     }
 
-    document.getElementById("close-btn").addEventListener("click", () => {
+    document.getElementById('close-btn').addEventListener('click', () => {
       tg.close();
     });
 
+    // Загружаем расходы при открытии
     loadExpenses();
   </script>
 </body>
