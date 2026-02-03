@@ -165,9 +165,22 @@
     // Способ 0: Пробуем получить из URL параметра (если передан ботом)
     const urlParams = new URLSearchParams(window.location.search);
     const userIdFromUrl = urlParams.get('user_id');
+    console.log('0. Проверка user_id из URL (query):', userIdFromUrl);
+    
+    // Также пробуем из hash (Telegram может переместить параметры)
+    if (!userIdFromUrl && window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const userIdFromHash = hashParams.get('user_id');
+      console.log('0.1. Проверка user_id из hash:', userIdFromHash);
+      if (userIdFromHash) {
+        telegramUserId = parseInt(userIdFromHash);
+        console.log('✅ Получен user_id из hash:', telegramUserId);
+      }
+    }
+    
     if (userIdFromUrl) {
       telegramUserId = parseInt(userIdFromUrl);
-      console.log('✅ Получен user_id из URL:', telegramUserId);
+      console.log('✅ Получен user_id из URL (query):', telegramUserId);
     }
     
     // Способ 1: Пробуем получить из initDataUnsafe (самый надёжный)

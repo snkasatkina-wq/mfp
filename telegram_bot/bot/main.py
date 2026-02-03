@@ -79,6 +79,10 @@ async def open_app(m: Message):
         user_id = m.from_user.id
         miniapp_url_with_user = f"{miniapp_url}?user_id={user_id}"
         
+        # Логируем для отладки
+        print(f"[DEBUG] Открытие мини-приложения для user_id={user_id}")
+        print(f"[DEBUG] URL: {miniapp_url_with_user}")
+        
         kb = ReplyKeyboardMarkup(
             keyboard=[
                 [
