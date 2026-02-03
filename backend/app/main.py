@@ -186,19 +186,31 @@ def get_user_info_from_init_data(payload: dict[str, Any]) -> dict[str, Any]:
     
     try:
         # Парсим query string
+        # initData может быть строкой вида "user=...&auth_date=..."
         params = urllib.parse.parse_qs(init_data)
         user_str = params.get("user", [None])[0]
-        if user_str:
-            user_data = json.loads(urllib.parse.unquote(user_str))
-            return {
-                "telegram_user_id": user_data.get("id"),
-                "first_name": user_data.get("first_name", ""),
-                "last_name": user_data.get("last_name", ""),
-            }
+        
+        if not user_str:
+            # Пробуем альтернативный формат - может быть уже декодировано
+            # или в другом формате
+            raise ValueError("Параметр 'user' не найден в initData")
+        
+        # Декодируем и парсим JSON
+        user_data = json.loads(urllib.parse.unquote(user_str))
+        
+        telegram_user_id = user_data.get("id")
+        if not telegram_user_id:
+            raise ValueError("telegram_user_id не найден в данных пользователя")
+        
+        return {
+            "telegram_user_id": telegram_user_id,
+            "first_name": user_data.get("first_name", ""),
+            "last_name": user_data.get("last_name", ""),
+        }
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка парсинга JSON из initData: {e}")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Ошибка парсинга initData: {e}")
-    
-    raise HTTPException(status_code=400, detail="Не удалось извлечь данные пользователя")
+        raise HTTPException(status_code=400, detail=f"Ошибка обработки initData: {str(e)}")
 
 
 @app.get("/miniapp/expenses", response_class=JSONResponse)

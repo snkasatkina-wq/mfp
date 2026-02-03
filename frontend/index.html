@@ -209,6 +209,8 @@
       // Если не удалось получить user_id, пробуем через бэкенд с initData
       if (!telegramUserId) {
         const initData = tg.initData;
+        console.log('Пробуем fallback через бэкенд, initData:', initData);
+        
         if (initData) {
           try {
             // Отправляем initData на бэкенд для парсинга
@@ -217,20 +219,30 @@
               headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({initData: initData})
             });
+            
+            console.log('Ответ от /miniapp/user-info:', res.status, res.statusText);
+            
             if (res.ok) {
               const data = await res.json();
+              console.log('Данные от бэкенда:', data);
               telegramUserId = data.telegram_user_id;
               userName = data.first_name || 'Пользователь';
               document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
+            } else {
+              const errorText = await res.text();
+              console.error('Ошибка от бэкенда:', res.status, errorText);
             }
           } catch (e) {
             console.error('Ошибка получения user_id через бэкенд:', e);
           }
+        } else {
+          console.error('initData пустой!');
         }
       }
 
       if (!telegramUserId) {
-        loadingEl.textContent = 'Ошибка: не удалось определить пользователя. Открой приложение через Telegram.';
+        loadingEl.innerHTML = 'Ошибка: не удалось определить пользователя.<br><br>Открой приложение через Telegram бота командой /app.<br><br>Проверь консоль браузера (F12) для отладки.';
+        console.error('❌ Не удалось получить telegramUserId. Проверь логи выше.');
         return;
       }
 
