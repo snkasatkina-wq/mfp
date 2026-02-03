@@ -1,14 +1,11 @@
 import os
-import tempfile
 import asyncio
 from dotenv import load_dotenv
 
 import httpx
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
-from aiogram.types import Message
-from aiogram.types import Update
-
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 from bot.voice_handler import register_voice_whisper_handler
 from bot.expense_text_handler import handle_text_expense
@@ -18,16 +15,17 @@ logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
+
 def env(name: str) -> str:
     v = os.getenv(name)
     if not v:
         raise RuntimeError(f"Missing env var: {name}")
     return v
 
+
 TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN")
 BACKEND_URL = env("BACKEND_URL").rstrip("/")
 OPENAI_API_KEY = env("OPENAI_API_KEY")
-
 
 
 async def main() -> None:
@@ -35,7 +33,6 @@ async def main() -> None:
     dp = Dispatcher()
     client = httpx.AsyncClient(timeout=httpx.Timeout(20.0))
 
-    # сюда позже добавим openai_client, пока просто отметим место
     from openai import OpenAI
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -48,6 +45,9 @@ async def main() -> None:
         backend_url=BACKEND_URL,
     )
 
+    @dp.message(Command("me"))
+    async def me(m: Message):
+        await m.answer(f"chat_id = {m.chat.id}")
 
     @dp.message(Command("start"))
     async def start(m: Message):
@@ -79,6 +79,24 @@ async def main() -> None:
             await m.answer(f"Привязка успешна. device_id={data.get('device_id')}")
         else:
             await m.answer("Код неверный или истёк. Сгенерируй новый в приложении и попробуй снова.")
+
+    @dp.message(Command("app"))
+    async def open_app(m: Message):
+        kb = ReplyKeyboardMarkup(
+            keyboard=[
+                [
+                    KeyboardButton(
+                        text="Открыть расходы",
+                        web_app=WebAppInfo(url="http://127.0.0.1:8000/miniapp"),
+                    )
+                ]
+            ],
+            resize_keyboard=True,
+        )
+        await m.answer(
+            "Нажми кнопку, чтобы открыть мини‑приложение расходов:",
+            reply_markup=kb,
+        )
 
     @dp.message()  # общий хэндлер для текста
     async def text_expense(m: Message):

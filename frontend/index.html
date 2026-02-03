@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Расходы за сегодня</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--tg-theme-bg-color, #ffffff);
+      color: var(--tg-theme-text-color, #000000);
+    }
+    h1 {
+      font-size: 22px;
+      margin-bottom: 8px;
+    }
+    p {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+    img {
+      max-width: 100%;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .expense {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.03);
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .expense strong {
+      font-weight: 600;
+    }
+    #empty {
+      font-size: 14px;
+      opacity: 0.7;
+    }
+    button {
+      margin-top: 12px;
+      padding: 10px 16px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      background: var(--tg-theme-button-color, #2a9df4);
+      color: var(--tg-theme-button-text-color, #ffffff);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Привет!</h1>
+  <p>Это мини‑приложение показывает последние расходы, которые ты отправила боту.</p>
+
+  <!-- маленькая картинка (положи файл, например, frontend/piggy.png) -->
+  <img src="/static/piggy.png" alt="Копилка" />
+
+  <div id="expenses"></div>
+  <div id="empty" style="display:none;">Пока расходов нет. Отправь что‑нибудь боту.</div>
+
+  <button id="close-btn">Закрыть</button>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+
+    async function loadExpenses() {
+      try {
+        const res = await fetch("/miniapp/expenses?limit=10");
+        const data = await res.json();
+        const container = document.getElementById("expenses");
+        const empty = document.getElementById("empty");
+
+        container.innerHTML = "";
+
+        if (!data || data.length === 0) {
+          empty.style.display = "block";
+          return;
+        } else {
+          empty.style.display = "none";
+        }
+
+        data.forEach((item) => {
+          const div = document.createElement("div");
+          div.className = "expense";
+          const amountRub = (item.amount_cents || 0) / 100;
+          const cat = item.category_name || "Без категории";
+          const desc = item.description || "";
+          div.innerHTML = `<strong>${amountRub.toFixed(2)} ₽</strong> · ${cat}<br>${desc}`;
+          container.appendChild(div);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    document.getElementById("close-btn").addEventListener("click", () => {
+      tg.close();
+    });
+
+    loadExpenses();
+  </script>
+</body>
+</html>
