@@ -162,15 +162,24 @@
     let telegramUserId = null;
     let userName = 'Пользователь';
     
-    // Способ 1: Пробуем получить из initDataUnsafe (самый надёжный)
-    const user = tg.initDataUnsafe?.user;
-    console.log('1. initDataUnsafe.user:', user);
+    // Способ 0: Пробуем получить из URL параметра (если передан ботом)
+    const urlParams = new URLSearchParams(window.location.search);
+    const userIdFromUrl = urlParams.get('user_id');
+    if (userIdFromUrl) {
+      telegramUserId = parseInt(userIdFromUrl);
+      console.log('✅ Получен user_id из URL:', telegramUserId);
+    }
     
-    if (user?.id) {
-      telegramUserId = user.id;
-      userName = user.first_name || 'Пользователь';
-      console.log('✅ Получен user из initDataUnsafe');
-    } else {
+    // Способ 1: Пробуем получить из initDataUnsafe (самый надёжный)
+    if (!telegramUserId) {
+      const user = tg.initDataUnsafe?.user;
+      console.log('1. initDataUnsafe.user:', user);
+      
+      if (user?.id) {
+        telegramUserId = user.id;
+        userName = user.first_name || 'Пользователь';
+        console.log('✅ Получен user из initDataUnsafe');
+      } else {
       // Способ 2: Парсим tg.initData
       let initData = tg.initData;
       console.log('2. tg.initData:', initData ? 'есть' : 'пусто');

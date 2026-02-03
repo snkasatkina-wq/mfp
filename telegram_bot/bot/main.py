@@ -72,15 +72,19 @@ async def main() -> None:
             "Мини-приложение: /app"
         )
 
-    @dp.message(Command("app"))
-    async def open_app(m: Message):
+@dp.message(Command("app"))
+async def open_app(m: Message):
         miniapp_url = os.getenv("MINIAPP_URL", f"{BACKEND_URL}/miniapp")
+        # Добавляем telegram_user_id в URL для идентификации пользователя
+        user_id = m.from_user.id
+        miniapp_url_with_user = f"{miniapp_url}?user_id={user_id}"
+        
         kb = ReplyKeyboardMarkup(
             keyboard=[
                 [
                     KeyboardButton(
                         text="Открыть расходы",
-                        web_app=WebAppInfo(url=miniapp_url),
+                        web_app=WebAppInfo(url=miniapp_url_with_user),
                     )
                 ]
             ],
