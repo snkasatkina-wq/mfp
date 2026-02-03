@@ -54,7 +54,7 @@ OPENAI_API_KEY=sk-...
 sudo nano /etc/systemd/system/mvp-backend.service
 ```
 
-Вставь (замени `username` на своего пользователя):
+Вставь (если работаешь от root, используй пути ниже; если от другого пользователя — замени `root` на своего):
 ```ini
 [Unit]
 Description=MVP Cost Backend
@@ -62,12 +62,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=username
-WorkingDirectory=/home/username/mvp-cost/backend
-Environment="PATH=/home/username/mvp-cost/venv/bin"
-ExecStart=/home/username/mvp-cost/venv/bin/python run_prod.py
+User=root
+WorkingDirectory=/root/mvp-cost/backend
+Environment="PATH=/root/mvp-cost/venv/bin"
+ExecStart=/root/mvp-cost/venv/bin/python run_prod.py
 Restart=always
-EnvironmentFile=/home/username/mvp-cost/.env
+EnvironmentFile=/root/mvp-cost/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -78,7 +78,7 @@ WantedBy=multi-user.target
 sudo nano /etc/systemd/system/mvp-bot.service
 ```
 
-Вставь:
+Вставь (если работаешь от root, используй пути ниже):
 ```ini
 [Unit]
 Description=MVP Cost Telegram Bot
@@ -86,12 +86,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=username
-WorkingDirectory=/home/username/mvp-cost/telegram_bot
-Environment="PATH=/home/username/mvp-cost/venv/bin"
-ExecStart=/home/username/mvp-cost/venv/bin/python -m bot.main
+User=root
+WorkingDirectory=/root/mvp-cost/telegram_bot
+Environment="PATH=/root/mvp-cost/venv/bin"
+ExecStart=/root/mvp-cost/venv/bin/python -m bot.main
 Restart=always
-EnvironmentFile=/home/username/mvp-cost/.env
+EnvironmentFile=/root/mvp-cost/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -106,18 +106,17 @@ sudo systemctl start mvp-backend mvp-bot
 
 ## 6. Настройка Nginx
 
+**Если у тебя уже есть конфиг с SSL (Certbot), просто дополни его:**
+
 ```bash
 sudo nano /etc/nginx/sites-available/mvp.kasven.ru
 ```
 
-Вставь (замени пути к SSL-сертификатам):
+В блоке `server { listen 443 ssl; ... }` внутри `location / { ... }` добавь строки (если их ещё нет):
+
 ```nginx
 server {
-    listen 443 ssl http2;
     server_name mvp.kasven.ru;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
@@ -125,16 +124,28 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Дополнительные настройки (добавь эти строки):
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/mvp.kasven.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mvp.kasven.ru/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 }
 ```
 
-Активируй:
+**Проверь и перезагрузи:**
 ```bash
-sudo ln -s /etc/nginx/sites-available/mvp.kasven.ru /etc/nginx/sites-enabled/
-sudo nginx -t
+sudo nginx -t  # проверка конфига
 sudo systemctl reload nginx
 ```
+
+**Если конфига ещё нет, создай новый** (но судя по твоему вопросу, он уже есть).
 
 ## 7. Проверка
 

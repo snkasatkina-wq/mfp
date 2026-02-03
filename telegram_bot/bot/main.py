@@ -51,43 +51,36 @@ async def main() -> None:
 
     @dp.message(Command("start"))
     async def start(m: Message):
-        await m.answer("Я жив. Для привязки: /link КОД")
-
-    @dp.message(Command("link"))
-    async def link(m: Message):
-        parts = (m.text or "").split()
-        if len(parts) != 2:
-            await m.answer("Формат: /link КОД")
-            return
-
-        code = parts[1].strip().upper()
-
-        payload = {
-            "telegram_chat_id": str(m.chat.id),
-            "code": code,
-        }
-
+        # Регистрируем/обновляем пользователя на бэкенде
         try:
-            r = await client.post(f"{BACKEND_URL}/link/confirm", json=payload)
-            r.raise_for_status()
-            data = r.json()
+            await client.post(
+                f"{BACKEND_URL}/users",
+                json={
+                    "telegram_user_id": m.from_user.id,
+                    "telegram_chat_id": m.chat.id,
+                },
+            )
         except Exception as e:
-            await m.answer(f"Ошибка связи с сервером: {e}")
+            await m.answer(f"Ошибка регистрации на сервере: {e}")
             return
-
-        if data.get("ok"):
-            await m.answer(f"Привязка успешна. device_id={data.get('device_id')}")
-        else:
-            await m.answer("Код неверный или истёк. Сгенерируй новый в приложении и попробуй снова.")
+        
+        await m.answer(
+            "Привет! Я бот для учёта расходов.\n\n"
+            "Отправь расход в формате:\n"
+            "сумма // описание // категория\n\n"
+            "Пример: 300 // яйца и хлеб // продукты\n\n"
+            "Мини-приложение: /app"
+        )
 
     @dp.message(Command("app"))
     async def open_app(m: Message):
+        miniapp_url = os.getenv("MINIAPP_URL", f"{BACKEND_URL}/miniapp")
         kb = ReplyKeyboardMarkup(
             keyboard=[
                 [
                     KeyboardButton(
                         text="Открыть расходы",
-                        web_app=WebAppInfo(url="http://127.0.0.1:8000/miniapp"),
+                        web_app=WebAppInfo(url=miniapp_url),
                     )
                 ]
             ],

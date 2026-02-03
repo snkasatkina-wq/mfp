@@ -6,11 +6,10 @@
 import uvicorn
 
 if __name__ == "__main__":
-    # Продакшен-режим: без reload, несколько воркеров
+    # Продакшен-режим: без reload, один воркер (workers может вызывать проблемы)
     uvicorn.run(
         "app.main:app",
         host="127.0.0.1",  # слушаем только localhost, Nginx проксирует
         port=8000,
-        workers=2,  # можно увеличить, если нужно
         log_level="info",
     )
