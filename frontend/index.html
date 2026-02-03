@@ -376,19 +376,27 @@
         const url = `/miniapp/expenses?telegram_user_id=${telegramUserId}&limit=50`;
         console.log('Запрос к:', url);
         
-        const res = await fetch(url);
+        // Добавляем таймаут для запроса
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 секунд
         
-        console.log('Ответ получен:', res.status, res.statusText);
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error('Ошибка HTTP:', res.status, errorText);
-          throw new Error(`HTTP ${res.status}: ${errorText}`);
-        }
-        
-        const data = await res.json();
-        console.log('Данные получены:', data);
-        loadingEl.style.display = 'none';
+        try {
+          const res = await fetch(url, {
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          console.log('Ответ получен:', res.status, res.statusText);
+          
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error('Ошибка HTTP:', res.status, errorText);
+            throw new Error(`HTTP ${res.status}: ${errorText}`);
+          }
+          
+          const data = await res.json();
+          console.log('Данные получены:', data);
+          loadingEl.style.display = 'none';
 
         if (!data || data.length === 0) {
           empty.style.display = 'block';
@@ -417,7 +425,11 @@
         });
       } catch (e) {
         console.error('Ошибка загрузки расходов:', e);
-        loadingEl.textContent = 'Ошибка загрузки расходов. Попробуй позже.';
+        if (e.name === 'AbortError') {
+          loadingEl.textContent = 'Превышено время ожидания. Проверь подключение к интернету.';
+        } else {
+          loadingEl.textContent = `Ошибка загрузки расходов: ${e.message}`;
+        }
       }
     }
 
