@@ -398,31 +398,35 @@
           console.log('Данные получены:', data);
           loadingEl.style.display = 'none';
 
-        if (!data || data.length === 0) {
-          empty.style.display = 'block';
-          return;
-        }
+          if (!data || data.length === 0) {
+            empty.style.display = 'block';
+            return;
+          }
 
-        data.forEach((item) => {
-          const div = document.createElement('div');
-          div.className = 'expense';
-          
-          const amountRub = (item.amount_cents || 0) / 100;
-          const cat = item.category_name || 'Без категории';
-          const desc = item.description || '';
-          const date = item.occurred_at || '';
-          
-          div.innerHTML = `
-            <div class="expense-left">
-              <div class="expense-amount">${amountRub.toFixed(2)} ₽</div>
-              <div class="expense-category">${cat}</div>
-              ${desc ? `<div class="expense-description">${desc}</div>` : ''}
-            </div>
-            ${date ? `<div class="expense-date">${date}</div>` : ''}
-          `;
-          
-          container.appendChild(div);
-        });
+          data.forEach((item) => {
+            const div = document.createElement('div');
+            div.className = 'expense';
+            
+            const amountRub = (item.amount_cents || 0) / 100;
+            const cat = item.category_name || 'Без категории';
+            const desc = item.description || '';
+            const date = item.occurred_at || '';
+            
+            div.innerHTML = `
+              <div class="expense-left">
+                <div class="expense-amount">${amountRub.toFixed(2)} ₽</div>
+                <div class="expense-category">${cat}</div>
+                ${desc ? `<div class="expense-description">${desc}</div>` : ''}
+              </div>
+              ${date ? `<div class="expense-date">${date}</div>` : ''}
+            `;
+            
+            container.appendChild(div);
+          });
+        } catch (e) {
+          clearTimeout(timeoutId);
+          throw e;
+        }
       } catch (e) {
         console.error('Ошибка загрузки расходов:', e);
         if (e.name === 'AbortError') {
