@@ -373,13 +373,21 @@
         container.innerHTML = '';
         empty.style.display = 'none';
 
-        const res = await fetch(`/miniapp/expenses?telegram_user_id=${telegramUserId}&limit=50`);
+        const url = `/miniapp/expenses?telegram_user_id=${telegramUserId}&limit=50`;
+        console.log('Запрос к:', url);
+        
+        const res = await fetch(url);
+        
+        console.log('Ответ получен:', res.status, res.statusText);
         
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          const errorText = await res.text();
+          console.error('Ошибка HTTP:', res.status, errorText);
+          throw new Error(`HTTP ${res.status}: ${errorText}`);
         }
         
         const data = await res.json();
+        console.log('Данные получены:', data);
         loadingEl.style.display = 'none';
 
         if (!data || data.length === 0) {
