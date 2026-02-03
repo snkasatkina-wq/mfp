@@ -159,11 +159,44 @@
     tg.expand();
 
     // Получаем данные пользователя из Telegram
+    let telegramUserId = null;
+    let userName = 'Пользователь';
+    
+    // Пробуем получить из initDataUnsafe (если доступно)
     const user = tg.initDataUnsafe?.user;
-    const userName = user?.first_name || 'Пользователь';
-    const userLastName = user?.last_name || '';
-    const fullName = userLastName ? `${userName} ${userLastName}` : userName;
-    const telegramUserId = user?.id;
+    console.log('initDataUnsafe.user:', user);
+    
+    if (user?.id) {
+      telegramUserId = user.id;
+      userName = user.first_name || 'Пользователь';
+      console.log('✅ Получен user из initDataUnsafe');
+    } else {
+      // Пробуем парсить initData вручную
+      const initData = tg.initData;
+      console.log('initData:', initData);
+      console.log('initDataUnsafe:', tg.initDataUnsafe);
+      
+      if (initData) {
+        try {
+          // initData может быть в формате query string
+          const params = new URLSearchParams(initData);
+          const userStr = params.get('user');
+          console.log('user из initData (raw):', userStr);
+          
+          if (userStr) {
+            const userData = JSON.parse(decodeURIComponent(userStr));
+            telegramUserId = userData.id;
+            userName = userData.first_name || 'Пользователь';
+            console.log('✅ Распарсен user из initData:', userData);
+          }
+        } catch (e) {
+          console.error('❌ Ошибка парсинга initData:', e);
+        }
+      }
+    }
+    
+    console.log('telegramUserId:', telegramUserId);
+    console.log('userName:', userName);
 
     // Обновляем приветствие
     document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
@@ -173,8 +206,31 @@
       const container = document.getElementById('expenses');
       const empty = document.getElementById('empty');
 
+      // Если не удалось получить user_id, пробуем через бэкенд с initData
       if (!telegramUserId) {
-        loadingEl.textContent = 'Ошибка: не удалось определить пользователя';
+        const initData = tg.initData;
+        if (initData) {
+          try {
+            // Отправляем initData на бэкенд для парсинга
+            const res = await fetch('/miniapp/user-info', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({initData: initData})
+            });
+            if (res.ok) {
+              const data = await res.json();
+              telegramUserId = data.telegram_user_id;
+              userName = data.first_name || 'Пользователь';
+              document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
+            }
+          } catch (e) {
+            console.error('Ошибка получения user_id через бэкенд:', e);
+          }
+        }
+      }
+
+      if (!telegramUserId) {
+        loadingEl.textContent = 'Ошибка: не удалось определить пользователя. Открой приложение через Telegram.';
         return;
       }
 

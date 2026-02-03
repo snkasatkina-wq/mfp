@@ -171,6 +171,36 @@ def create_expense(
     return {"ok": True, "expense_id": expense.id}
 
 
+@app.post("/miniapp/user-info", response_class=JSONResponse)
+def get_user_info_from_init_data(payload: dict[str, Any]) -> dict[str, Any]:
+    """Парсит initData от Telegram WebApp и возвращает информацию о пользователе.
+    
+    Используется как fallback, если фронтенд не может распарсить initData.
+    """
+    import urllib.parse
+    import json
+    
+    init_data = payload.get("initData", "")
+    if not init_data:
+        raise HTTPException(status_code=400, detail="initData не предоставлен")
+    
+    try:
+        # Парсим query string
+        params = urllib.parse.parse_qs(init_data)
+        user_str = params.get("user", [None])[0]
+        if user_str:
+            user_data = json.loads(urllib.parse.unquote(user_str))
+            return {
+                "telegram_user_id": user_data.get("id"),
+                "first_name": user_data.get("first_name", ""),
+                "last_name": user_data.get("last_name", ""),
+            }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка парсинга initData: {e}")
+    
+    raise HTTPException(status_code=400, detail="Не удалось извлечь данные пользователя")
+
+
 @app.get("/miniapp/expenses", response_class=JSONResponse)
 def miniapp_expenses(
     telegram_user_id: int,
