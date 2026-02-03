@@ -245,6 +245,15 @@
       }
     }
     
+    // Если получили user_id из URL, пробуем получить имя пользователя
+    if (telegramUserId && userName === 'Пользователь') {
+      // Пробуем получить имя из initDataUnsafe
+      const user = tg.initDataUnsafe?.user;
+      if (user?.first_name) {
+        userName = user.first_name;
+      }
+    }
+    
     console.log('Итоговый telegramUserId:', telegramUserId);
     console.log('Итоговый userName:', userName);
 
