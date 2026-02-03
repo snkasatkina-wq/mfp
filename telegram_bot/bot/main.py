@@ -72,8 +72,8 @@ async def main() -> None:
             "Мини-приложение: /app"
         )
 
-@dp.message(Command("app"))
-async def open_app(m: Message):
+    @dp.message(Command("app"))
+    async def open_app(m: Message):
         miniapp_url = os.getenv("MINIAPP_URL", f"{BACKEND_URL}/miniapp")
         # Добавляем telegram_user_id в URL для идентификации пользователя
         user_id = m.from_user.id
