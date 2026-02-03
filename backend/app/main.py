@@ -171,6 +171,27 @@ def create_expense(
     return {"ok": True, "expense_id": expense.id}
 
 
+@app.post("/miniapp/get-user-by-context", response_class=JSONResponse)
+def get_user_by_context(payload: dict[str, Any], db: Session = Depends(get_db)) -> dict[str, Any]:
+    """Пытается определить пользователя по контексту WebApp, если initData недоступен.
+    
+    Это fallback метод, когда Telegram не передаёт initData.
+    """
+    init_data_unsafe = payload.get("initDataUnsafe", {})
+    
+    # Пробуем получить user из initDataUnsafe
+    user_data = init_data_unsafe.get("user")
+    if user_data and user_data.get("id"):
+        return {
+            "telegram_user_id": user_data.get("id"),
+            "first_name": user_data.get("first_name", ""),
+            "last_name": user_data.get("last_name", ""),
+        }
+    
+    # Если не получилось, возвращаем ошибку
+    raise HTTPException(status_code=400, detail="Не удалось определить пользователя из контекста")
+
+
 @app.post("/miniapp/user-info", response_class=JSONResponse)
 def get_user_info_from_init_data(payload: dict[str, Any]) -> dict[str, Any]:
     """Парсит initData от Telegram WebApp и возвращает информацию о пользователе.

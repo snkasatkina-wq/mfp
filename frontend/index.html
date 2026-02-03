@@ -308,8 +308,44 @@
         }
       }
 
+      // Если всё ещё не получили user_id, пробуем альтернативный способ
       if (!telegramUserId) {
-        loadingEl.innerHTML = 'Не удалось определить пользователя.';
+        // Пробуем получить данные через бэкенд без initData
+        // Используем доступную информацию из WebApp API
+        console.log('Пробуем альтернативный способ через бэкенд...');
+        console.log('tg.initDataUnsafe:', tg.initDataUnsafe);
+        console.log('tg.version:', tg.version);
+        console.log('tg.platform:', tg.platform);
+        
+        try {
+          // Отправляем запрос на бэкенд с просьбой определить пользователя
+          // Бэкенд может использовать другие способы идентификации
+          const res = await fetch('/miniapp/get-user-by-context', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              initDataUnsafe: tg.initDataUnsafe,
+              version: tg.version,
+              platform: tg.platform,
+            })
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            if (data.telegram_user_id) {
+              telegramUserId = data.telegram_user_id;
+              userName = data.first_name || 'Пользователь';
+              document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
+              console.log('✅ Получен user через альтернативный способ:', data);
+            }
+          }
+        } catch (e) {
+          console.error('Ошибка альтернативного способа:', e);
+        }
+      }
+
+      if (!telegramUserId) {
+        loadingEl.innerHTML = 'Не удалось определить пользователя.<br><br>Убедись, что открываешь приложение через кнопку в боте (команда /app).';
         console.error('❌ Не удалось получить telegramUserId. Проверь логи выше.');
         return;
       }
