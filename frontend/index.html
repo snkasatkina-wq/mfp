@@ -171,10 +171,29 @@
       userName = user.first_name || 'Пользователь';
       console.log('✅ Получен user из initDataUnsafe');
     } else {
-      // Пробуем парсить initData вручную
-      const initData = tg.initData;
+      // Пробуем получить initData из разных источников
+      let initData = tg.initData;
+      
+      // Если initData пустой, пробуем получить из URL (tgWebAppData)
+      if (!initData) {
+        // Пробуем из query параметров
+        const urlParams = new URLSearchParams(window.location.search);
+        initData = urlParams.get('tgWebAppData') || '';
+        
+        // Если не нашли, пробуем из hash
+        if (!initData && window.location.hash) {
+          const hashMatch = window.location.hash.match(/tgWebAppData=([^&]+)/);
+          if (hashMatch) {
+            initData = decodeURIComponent(hashMatch[1]);
+          }
+        }
+        
+        console.log('initData из URL:', initData ? 'найден' : 'не найден');
+      }
+      
       console.log('initData:', initData);
       console.log('initDataUnsafe:', tg.initDataUnsafe);
+      console.log('window.location:', window.location.href);
       
       if (initData) {
         try {
@@ -184,7 +203,20 @@
           console.log('user из initData (raw):', userStr);
           
           if (userStr) {
-            const userData = JSON.parse(decodeURIComponent(userStr));
+            // Может быть двойное кодирование, пробуем декодировать
+            let decoded = userStr;
+            try {
+              decoded = decodeURIComponent(userStr);
+              // Если это JSON строка, пробуем ещё раз декодировать
+              if (decoded.includes('%')) {
+                decoded = decodeURIComponent(decoded);
+              }
+            } catch (e) {
+              console.warn('Ошибка декодирования, пробуем как есть:', e);
+            }
+            
+            console.log('decoded user:', decoded);
+            const userData = JSON.parse(decoded);
             telegramUserId = userData.id;
             userName = userData.first_name || 'Пользователь';
             console.log('✅ Распарсен user из initData:', userData);
