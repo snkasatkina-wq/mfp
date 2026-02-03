@@ -99,6 +99,17 @@ class EnqueueExpenseResponse(BaseModel):
     queued_count: int
 
 
+class ExpenseCreateRequest(BaseModel):
+    """Запрос на создание расхода от бота."""
+    telegram_user_id: int
+    telegram_chat_id: int
+    amount_cents: int
+    description: str
+    category: str
+    subcategory: str | None = None
+    occurred_at: str | None = None  # формат "DD.MM.YYYY HH:MM" или None
+
+
 # ===================== Health =====================
 
 @app.get("/health")
@@ -121,6 +132,43 @@ def create_or_get_user(
         telegram_chat_id=payload.telegram_chat_id,
     )
     return user
+
+@app.post("/expenses")
+def create_expense(
+    payload: ExpenseCreateRequest,
+    db: Session = Depends(get_db),
+):
+    """Создаёт расход сразу в БД (без очереди).
+    
+    Используется ботом для прямого сохранения расходов.
+    """
+    # Находим или создаём пользователя
+    user = crud.get_or_create_user(
+        db=db,
+        telegram_user_id=payload.telegram_user_id,
+        telegram_chat_id=payload.telegram_chat_id,
+    )
+    
+    # Конвертируем дату/время
+    if payload.occurred_at:
+        occurred_dt = datetime.strptime(payload.occurred_at, "%d.%m.%Y %H:%M")
+    else:
+        occurred_dt = datetime.utcnow()
+    
+    # Создаём расход
+    expense = crud.create_expense(
+        db=db,
+        user_id=user.id,
+        amount_cents=payload.amount_cents,
+        description=payload.description,
+        category_name=payload.category,
+        subcategory_name=payload.subcategory,
+        occurred_at=occurred_dt,
+        source="telegram",
+    )
+    
+    return {"ok": True, "expense_id": expense.id}
+
 
 @app.get("/miniapp/expenses", response_class=JSONResponse)
 def miniapp_expenses(limit: int = 10, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
