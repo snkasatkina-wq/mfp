@@ -1,0 +1,23 @@
+[Unit]
+Description=MVP Cost Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+# Или замени на своего пользователя, если нужно
+WorkingDirectory=/home/username/mvp-cost/telegram_bot
+Environment="PATH=/home/username/mvp-cost/venv/bin"
+ExecStart=/home/username/mvp-cost/venv/bin/python -m bot.main
+Restart=always
+RestartSec=10
+
+# Переменные окружения из .env
+EnvironmentFile=/home/username/mvp-cost/.env
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

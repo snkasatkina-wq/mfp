@@ -1,0 +1,23 @@
+[Unit]
+Description=MVP Cost Backend (FastAPI)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+# Или замени на своего пользователя, если нужно
+WorkingDirectory=/home/username/mvp-cost/backend
+Environment="PATH=/home/username/mvp-cost/venv/bin"
+ExecStart=/home/username/mvp-cost/venv/bin/python run_prod.py
+Restart=always
+RestartSec=10
+
+# Переменные окружения из .env
+EnvironmentFile=/home/username/mvp-cost/.env
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
