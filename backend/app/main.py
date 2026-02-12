@@ -16,18 +16,17 @@ import asyncio
 import os
 from typing import Optional, Any
 
-import httpx
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from openai import OpenAI
 
 from .database import SessionLocal, init_db
 from . import crud
 from .models import User
+from . import image_generation
 
 app = FastAPI(title="Expense Tracker Backend", version="0.1.0")
 
@@ -271,15 +270,38 @@ def get_user_image(
     }
 
 
+class GenerateImageRequest(BaseModel):
+    """Запрос на генерацию картинки с промптом от пользователя."""
+    prompt: str
+
+
 @app.post("/miniapp/generate-image", response_class=JSONResponse)
 def generate_user_image(
     telegram_user_id: int,
+    payload: GenerateImageRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Генерирует картинку для пользователя через OpenAI DALL-E и сохраняет её.
     
+    Принимает промпт от пользователя, улучшает его через ChatGPT,
+    затем генерирует картинку через DALL-E.
+    
     Возвращает URL сгенерированной картинки.
     """
+    # Валидация длины промпта
+    user_prompt = payload.prompt.strip()
+    if len(user_prompt) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Промпт слишком длинный. Максимум 200 символов."
+        )
+    
+    if not user_prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Промпт не может быть пустым"
+        )
+    
     # Находим пользователя
     user = (
         db.query(User)
@@ -290,66 +312,36 @@ def generate_user_image(
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     
-    # Получаем API ключ OpenAI
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY не настроен на сервере"
-        )
-    
-    # Создаём клиент OpenAI
-    openai_client = OpenAI(api_key=openai_api_key)
-    
-    # Генерируем картинку через DALL-E
-    # Используем промпт, связанный с копилкой и расходами
-    prompt = (
-        "A cute, modern illustration of a piggy bank with coins, "
-        "in a minimalist style, suitable for a personal finance app. "
-        "Warm colors, friendly design, digital art style."
-    )
+    # Определяем путь к директории frontend
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    FRONTEND_DIR = BASE_DIR.parent / "frontend"
     
     try:
-        response = openai_client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size="1024x1024",
-            quality="standard",
-            n=1,
+        # Генерируем и сохраняем картинку
+        relative_path = image_generation.generate_and_save_user_image(
+            user_prompt=user_prompt,
+            user_id=user.id,
+            frontend_dir=FRONTEND_DIR,
         )
         
-        # Получаем URL сгенерированной картинки
-        image_url = response.data[0].url
+        # Обновляем путь в БД
+        crud.update_user_custom_image_path(
+            db=db,
+            user_id=user.id,
+            custom_image_path=relative_path,
+        )
         
-        # Скачиваем картинку и сохраняем локально
-        with httpx.Client(timeout=30.0) as http_client:
-            img_response = http_client.get(image_url)
-            img_response.raise_for_status()
+        return {
+            "ok": True,
+            "image_url": f"/static/{relative_path}",
+        }
             
-            # Создаём директорию для картинок пользователей, если её нет
-            BASE_DIR = Path(__file__).resolve().parent.parent
-            FRONTEND_DIR = BASE_DIR.parent / "frontend"
-            user_images_dir = FRONTEND_DIR / "user_images"
-            user_images_dir.mkdir(exist_ok=True)
-            
-            # Сохраняем картинку
-            image_filename = f"{user.id}.png"
-            image_path = user_images_dir / image_filename
-            image_path.write_bytes(img_response.content)
-            
-            # Обновляем путь в БД (относительно static)
-            relative_path = f"user_images/{image_filename}"
-            crud.update_user_custom_image_path(
-                db=db,
-                user_id=user.id,
-                custom_image_path=relative_path,
-            )
-            
-            return {
-                "ok": True,
-                "image_url": f"/static/{relative_path}",
-            }
-            
+    except ValueError as e:
+        # Ошибка конфигурации (например, отсутствует API ключ)
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
     except Exception as e:
         raise HTTPException(
             status_code=500,

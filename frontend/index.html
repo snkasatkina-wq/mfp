@@ -143,6 +143,61 @@
       width: auto;
       display: inline-block;
     }
+    
+    .input-section {
+      margin: 20px 0;
+    }
+    
+    .input-container {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    
+    #universal-input {
+      flex: 1;
+      padding: 12px;
+      font-size: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--tg-theme-hint-color, #cccccc);
+      background: var(--tg-theme-bg-color, #ffffff);
+      color: var(--tg-theme-text-color, #000000);
+      font-family: inherit;
+    }
+    
+    #universal-input:focus {
+      outline: none;
+      border-color: var(--tg-theme-button-color, #2a9df4);
+    }
+    
+    .send-btn {
+      padding: 12px 24px;
+      font-size: 14px;
+      border-radius: 12px;
+      border: none;
+      background: var(--tg-theme-button-color, #2a9df4);
+      color: var(--tg-theme-button-text-color, #ffffff);
+      cursor: pointer;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    
+    .send-btn:active {
+      opacity: 0.8;
+    }
+    
+    .send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .input-hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color, #999999);
+      text-align: center;
+      min-height: 16px;
+    }
   </style>
 </head>
 <body>
@@ -154,6 +209,19 @@
   <div class="image-container">
     <img id="user-image" src="/static/piggy.png" alt="Копилка" />
     <button id="generate-image-btn" class="generate-btn">🎨 Сгенерировать картинку</button>
+  </div>
+
+  <div class="input-section">
+    <div class="input-container">
+      <input 
+        type="text" 
+        id="universal-input" 
+        placeholder="Введите текст..." 
+        maxlength="200"
+      />
+      <button id="send-btn" class="send-btn">Отправить</button>
+    </div>
+    <div id="input-hint" class="input-hint"></div>
   </div>
 
   <div class="expenses-section">
@@ -290,6 +358,42 @@
     // Обновляем приветствие
     document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
 
+    // Состояние для универсального поля ввода
+    let inputMode = 'normal'; // 'normal' | 'waiting_prompt'
+    const inputEl = document.getElementById('universal-input');
+    const sendBtn = document.getElementById('send-btn');
+    const hintEl = document.getElementById('input-hint');
+
+    // Обработчик отправки из универсального поля
+    async function handleSendInput() {
+      const text = inputEl.value.trim();
+      if (!text) {
+        return;
+      }
+
+      if (inputMode === 'waiting_prompt') {
+        // Режим ожидания промпта для генерации картинки
+        await generateImageWithPrompt(text);
+      } else {
+        // Обычный режим (для будущих функций: расходы, лимиты)
+        console.log('Отправка текста в обычном режиме:', text);
+        // TODO: здесь будет логика для расходов/лимитов
+      }
+
+      // Очищаем поле после отправки
+      inputEl.value = '';
+    }
+
+    // Обработчик нажатия Enter в поле ввода
+    inputEl.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        handleSendInput();
+      }
+    });
+
+    // Обработчик клика на кнопку отправки
+    sendBtn.addEventListener('click', handleSendInput);
+
     // Загружаем картинку пользователя
     async function loadUserImage() {
       if (!telegramUserId) {
@@ -314,10 +418,38 @@
       }
     }
 
-    // Генерируем новую картинку
-    async function generateImage() {
+    // Инициируем процесс генерации картинки (запрашиваем промпт у пользователя)
+    function generateImage() {
       if (!telegramUserId) {
         alert('Не удалось определить пользователя');
+        return;
+      }
+      
+      // Переводим поле ввода в режим ожидания промпта
+      inputMode = 'waiting_prompt';
+      inputEl.placeholder = 'Введите описание картинки (до 200 символов)';
+      hintEl.textContent = 'Введите описание картинки, которую хотите сгенерировать';
+      inputEl.focus();
+      
+      // Блокируем кнопку генерации
+      const btn = document.getElementById('generate-image-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Ожидание описания...';
+      }
+    }
+
+    // Генерируем картинку с промптом от пользователя
+    async function generateImageWithPrompt(userPrompt) {
+      if (!telegramUserId) {
+        alert('Не удалось определить пользователя');
+        return;
+      }
+      
+      // Проверяем длину промпта
+      if (userPrompt.length > 200) {
+        alert('Описание слишком длинное. Максимум 200 символов.');
+        resetInputMode();
         return;
       }
       
@@ -329,9 +461,11 @@
         return;
       }
       
-      // Блокируем кнопку
+      // Обновляем UI
       btn.disabled = true;
       btn.textContent = '⏳ Генерация...';
+      hintEl.textContent = 'Улучшаю описание и генерирую картинку...';
+      sendBtn.disabled = true;
       
       // Показываем индикатор загрузки на картинке
       const originalSrc = imgEl.src;
@@ -340,6 +474,10 @@
       try {
         const res = await fetch(`/miniapp/generate-image?telegram_user_id=${telegramUserId}`, {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ prompt: userPrompt }),
         });
         
         if (!res.ok) {
@@ -358,6 +496,9 @@
             btn.disabled = false;
             console.log('Картинка сгенерирована:', data.image_url);
           }, 500);
+          
+          // Сбрасываем режим ввода
+          resetInputMode();
         } else {
           throw new Error('Неожиданный формат ответа от сервера');
         }
@@ -368,7 +509,16 @@
         imgEl.style.opacity = '1';
         btn.textContent = '🎨 Сгенерировать картинку';
         btn.disabled = false;
+        resetInputMode();
       }
+    }
+
+    // Сбрасываем режим ввода в обычное состояние
+    function resetInputMode() {
+      inputMode = 'normal';
+      inputEl.placeholder = 'Введите текст...';
+      hintEl.textContent = '';
+      sendBtn.disabled = false;
     }
 
     async function loadExpenses() {
