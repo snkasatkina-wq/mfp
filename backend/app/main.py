@@ -13,14 +13,17 @@ from pathlib import Path
 import secrets
 import time
 import asyncio
+import os
 from typing import Optional, Any
 
+import httpx
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from openai import OpenAI
 
 from .database import SessionLocal, init_db
 from . import crud
@@ -233,6 +236,125 @@ def get_user_info_from_init_data(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Ошибка парсинга JSON из initData: {e}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка обработки initData: {str(e)}")
+
+
+@app.get("/miniapp/user-image", response_class=JSONResponse)
+def get_user_image(
+    telegram_user_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Возвращает информацию о картинке пользователя для мини‑приложения.
+    
+    Если у пользователя есть сгенерированная картинка, возвращает её путь,
+    иначе возвращает путь к дефолтной картинке.
+    """
+    user = (
+        db.query(User)
+        .filter(User.telegram_user_id == telegram_user_id)
+        .first()
+    )
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    
+    # Если есть сгенерированная картинка, возвращаем её
+    if user.custom_image_path:
+        return {
+            "image_url": f"/static/{user.custom_image_path}",
+            "is_custom": True,
+        }
+    
+    # Иначе возвращаем дефолтную
+    return {
+        "image_url": "/static/piggy.png",
+        "is_custom": False,
+    }
+
+
+@app.post("/miniapp/generate-image", response_class=JSONResponse)
+def generate_user_image(
+    telegram_user_id: int,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Генерирует картинку для пользователя через OpenAI DALL-E и сохраняет её.
+    
+    Возвращает URL сгенерированной картинки.
+    """
+    # Находим пользователя
+    user = (
+        db.query(User)
+        .filter(User.telegram_user_id == telegram_user_id)
+        .first()
+    )
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    
+    # Получаем API ключ OpenAI
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY не настроен на сервере"
+        )
+    
+    # Создаём клиент OpenAI
+    openai_client = OpenAI(api_key=openai_api_key)
+    
+    # Генерируем картинку через DALL-E
+    # Используем промпт, связанный с копилкой и расходами
+    prompt = (
+        "A cute, modern illustration of a piggy bank with coins, "
+        "in a minimalist style, suitable for a personal finance app. "
+        "Warm colors, friendly design, digital art style."
+    )
+    
+    try:
+        response = openai_client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        
+        # Получаем URL сгенерированной картинки
+        image_url = response.data[0].url
+        
+        # Скачиваем картинку и сохраняем локально
+        with httpx.Client(timeout=30.0) as http_client:
+            img_response = http_client.get(image_url)
+            img_response.raise_for_status()
+            
+            # Создаём директорию для картинок пользователей, если её нет
+            BASE_DIR = Path(__file__).resolve().parent.parent
+            FRONTEND_DIR = BASE_DIR.parent / "frontend"
+            user_images_dir = FRONTEND_DIR / "user_images"
+            user_images_dir.mkdir(exist_ok=True)
+            
+            # Сохраняем картинку
+            image_filename = f"{user.id}.png"
+            image_path = user_images_dir / image_filename
+            image_path.write_bytes(img_response.content)
+            
+            # Обновляем путь в БД (относительно static)
+            relative_path = f"user_images/{image_filename}"
+            crud.update_user_custom_image_path(
+                db=db,
+                user_id=user.id,
+                custom_image_path=relative_path,
+            )
+            
+            return {
+                "ok": True,
+                "image_url": f"/static/{relative_path}",
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка генерации картинки: {str(e)}"
+        )
 
 
 @app.get("/miniapp/expenses", response_class=JSONResponse)

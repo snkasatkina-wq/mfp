@@ -249,3 +249,23 @@ def get_chat_id_for_device(
         .first()
     )
     return link.telegram_chat_id if link is not None else None
+
+
+def update_user_custom_image_path(
+    db: Session,
+    user_id: int,
+    custom_image_path: str | None,
+) -> User:
+    """Обновляет путь к сгенерированной картинке пользователя.
+    
+    `custom_image_path` должен быть относительным путём от директории static
+    (например, "user_images/123.png").
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise ValueError(f"Пользователь с id={user_id} не найден")
+    
+    user.custom_image_path = custom_image_path
+    db.commit()
+    db.refresh(user)
+    return user

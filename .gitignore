@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -26,6 +26,13 @@ telegram_bot/.env
 # Database
 *.sqlite
 *.db
+
+# User-generated images
+frontend/user_images/*.png
+frontend/user_images/*.jpg
+frontend/user_images/*.jpeg
+frontend/user_images/*.webp
+!frontend/user_images/.gitkeep
 
 # OS
 .DS_Store

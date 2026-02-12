@@ -42,6 +42,8 @@ class User(Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Пороговый процент для уведомлений о перерасходе (MVP‑настройка)
     threshold_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=80)
+    # Путь к сгенерированной пользователем картинке (относительно директории static, например "user_images/123.png")
+    custom_image_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Дата/время создания записи пользователя
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=False), server_default=func.now(), nullable=False

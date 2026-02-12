@@ -128,6 +128,21 @@
     button:active {
       opacity: 0.8;
     }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .generate-btn {
+      margin-top: 12px;
+      padding: 10px 20px;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      color: var(--tg-theme-text-color, #000000);
+      width: auto;
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
@@ -137,7 +152,8 @@
   </div>
 
   <div class="image-container">
-    <img src="/static/piggy.png" alt="Копилка" />
+    <img id="user-image" src="/static/piggy.png" alt="Копилка" />
+    <button id="generate-image-btn" class="generate-btn">🎨 Сгенерировать картинку</button>
   </div>
 
   <div class="expenses-section">
@@ -273,6 +289,87 @@
 
     // Обновляем приветствие
     document.getElementById('greeting').textContent = `Привет, ${userName}! 👋`;
+
+    // Загружаем картинку пользователя
+    async function loadUserImage() {
+      if (!telegramUserId) {
+        console.log('Не удалось загрузить картинку: нет telegramUserId');
+        return;
+      }
+      
+      try {
+        const res = await fetch(`/miniapp/user-image?telegram_user_id=${telegramUserId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const imgEl = document.getElementById('user-image');
+          if (imgEl && data.image_url) {
+            imgEl.src = data.image_url;
+            console.log('Картинка загружена:', data.image_url, 'is_custom:', data.is_custom);
+          }
+        } else {
+          console.error('Ошибка загрузки картинки:', res.status);
+        }
+      } catch (e) {
+        console.error('Ошибка при загрузке картинки пользователя:', e);
+      }
+    }
+
+    // Генерируем новую картинку
+    async function generateImage() {
+      if (!telegramUserId) {
+        alert('Не удалось определить пользователя');
+        return;
+      }
+      
+      const btn = document.getElementById('generate-image-btn');
+      const imgEl = document.getElementById('user-image');
+      
+      if (!btn || !imgEl) {
+        console.error('Элементы не найдены');
+        return;
+      }
+      
+      // Блокируем кнопку
+      btn.disabled = true;
+      btn.textContent = '⏳ Генерация...';
+      
+      // Показываем индикатор загрузки на картинке
+      const originalSrc = imgEl.src;
+      imgEl.style.opacity = '0.5';
+      
+      try {
+        const res = await fetch(`/miniapp/generate-image?telegram_user_id=${telegramUserId}`, {
+          method: 'POST',
+        });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errorText}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.ok && data.image_url) {
+          // Обновляем картинку с небольшим таймаутом для визуального эффекта
+          setTimeout(() => {
+            imgEl.src = data.image_url + '?t=' + Date.now(); // Добавляем timestamp для обхода кэша
+            imgEl.style.opacity = '1';
+            btn.textContent = '🎨 Сгенерировать картинку';
+            btn.disabled = false;
+            console.log('Картинка сгенерирована:', data.image_url);
+          }, 500);
+        } else {
+          throw new Error('Неожиданный формат ответа от сервера');
+        }
+      } catch (e) {
+        console.error('Ошибка генерации картинки:', e);
+        alert(`Ошибка генерации картинки: ${e.message}`);
+        imgEl.src = originalSrc;
+        imgEl.style.opacity = '1';
+        btn.textContent = '🎨 Сгенерировать картинку';
+        btn.disabled = false;
+      }
+    }
 
     async function loadExpenses() {
       const loadingEl = document.getElementById('loading');
@@ -455,7 +552,14 @@
       tg.close();
     });
 
-    // Загружаем расходы при открытии
+    // Обработчик кнопки генерации картинки
+    const generateBtn = document.getElementById('generate-image-btn');
+    if (generateBtn) {
+      generateBtn.addEventListener('click', generateImage);
+    }
+
+    // Загружаем картинку и расходы при открытии
+    loadUserImage();
     loadExpenses();
   </script>
 </body>
