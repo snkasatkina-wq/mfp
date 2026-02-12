@@ -39,14 +39,29 @@
     .image-container {
       text-align: center;
       margin: 20px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
     }
     
-    img {
+    .image-container img {
       max-width: 200px;
       width: 100%;
       height: auto;
       border-radius: 16px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      display: block;
+    }
+    
+    .generate-btn {
+      margin-top: 0;
+      padding: 10px 20px;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      color: var(--tg-theme-text-color, #000000);
+      width: auto;
+      display: inline-block;
     }
     
     .expenses-section {
@@ -134,28 +149,20 @@
       cursor: not-allowed;
     }
     
-    .generate-btn {
-      margin-top: 12px;
-      padding: 10px 20px;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-      color: var(--tg-theme-text-color, #000000);
-      width: auto;
-      display: inline-block;
-    }
-    
     .input-section {
       margin: 20px 0;
     }
     
     .input-container {
       display: flex;
-      gap: 8px;
-      align-items: center;
+      gap: 12px;
+      align-items: stretch;
+      width: 100%;
     }
     
     #universal-input {
       flex: 1;
+      min-width: 0;
       padding: 12px;
       font-size: 14px;
       border-radius: 12px;
@@ -171,15 +178,22 @@
     }
     
     .send-btn {
-      padding: 12px 24px;
-      font-size: 14px;
+      padding: 0;
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      max-width: 44px;
+      font-size: 20px;
       border-radius: 12px;
       border: none;
       background: var(--tg-theme-button-color, #2a9df4);
       color: var(--tg-theme-button-text-color, #ffffff);
       cursor: pointer;
       font-weight: 500;
-      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
     
     .send-btn:active {
@@ -216,10 +230,11 @@
       <input 
         type="text" 
         id="universal-input" 
-        placeholder="Введите текст..." 
+        placeholder="Нажмите кнопку действия выше..." 
         maxlength="200"
+        disabled
       />
-      <button id="send-btn" class="send-btn">Отправить</button>
+      <button id="send-btn" class="send-btn" disabled title="Отправить">✓</button>
     </div>
     <div id="input-hint" class="input-hint"></div>
   </div>
@@ -366,6 +381,11 @@
 
     // Обработчик отправки из универсального поля
     async function handleSendInput() {
+      // Проверяем, что поле активно (не должно быть disabled)
+      if (inputEl.disabled) {
+        return;
+      }
+      
       const text = inputEl.value.trim();
       if (!text) {
         return;
@@ -425,10 +445,12 @@
         return;
       }
       
-      // Переводим поле ввода в режим ожидания промпта
+      // Активируем поле ввода и переводим в режим ожидания промпта
       inputMode = 'waiting_prompt';
+      inputEl.disabled = false;
       inputEl.placeholder = 'Введите описание картинки (до 200 символов)';
       hintEl.textContent = 'Введите описание картинки, которую хотите сгенерировать';
+      sendBtn.disabled = false;
       inputEl.focus();
       
       // Блокируем кнопку генерации
@@ -497,7 +519,7 @@
             console.log('Картинка сгенерирована:', data.image_url);
           }, 500);
           
-          // Сбрасываем режим ввода
+          // Сбрасываем режим ввода (деактивируем поле)
           resetInputMode();
         } else {
           throw new Error('Неожиданный формат ответа от сервера');
@@ -509,16 +531,18 @@
         imgEl.style.opacity = '1';
         btn.textContent = '🎨 Сгенерировать картинку';
         btn.disabled = false;
+        // При ошибке также деактивируем поле ввода
         resetInputMode();
       }
     }
 
-    // Сбрасываем режим ввода в обычное состояние
+    // Сбрасываем режим ввода в обычное состояние (деактивируем поле)
     function resetInputMode() {
       inputMode = 'normal';
-      inputEl.placeholder = 'Введите текст...';
+      inputEl.disabled = true;
+      inputEl.placeholder = 'Нажмите кнопку действия выше...';
       hintEl.textContent = '';
-      sendBtn.disabled = false;
+      sendBtn.disabled = true;
     }
 
     async function loadExpenses() {
