@@ -449,7 +449,7 @@ async def upload_receipt(
     file_filename = file.filename
     
     def process_receipt_with_status():
-        """Генератор, который отправляет статусы обработки чека."""
+        """Async генератор, который отправляет статусы обработки чека."""
         # Создаём отдельную сессию БД для генератора, чтобы она оставалась открытой
         db = SessionLocal()
         try:
