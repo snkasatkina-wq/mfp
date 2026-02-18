@@ -252,6 +252,11 @@
       cursor: pointer;
       white-space: nowrap;
     }
+
+    .category-chip-active {
+      background: var(--tg-theme-button-color, #2a9df4);
+      color: var(--tg-theme-button-text-color, #ffffff);
+    }
   </style>
 </head>
 <body>
@@ -433,6 +438,7 @@
     let inputMode = 'normal'; // 'normal' | 'waiting_prompt' | 'waiting_categories'
     let currentTab = 'expenses'; // 'expenses' | 'categories'
     let categoriesLoaded = false;
+    let activeCategoryName = null;
     const inputEl = document.getElementById('universal-input');
     const sendBtn = document.getElementById('send-btn');
     const hintEl = document.getElementById('input-hint');
@@ -728,6 +734,7 @@
           btn.className = 'category-chip';
           btn.textContent = cat.name;
           btn.addEventListener('click', () => {
+            setActiveCategory(cat.name);
             loadCategoryExpenses(cat.name);
           });
           container.appendChild(btn);
@@ -794,6 +801,18 @@
         console.error('Ошибка загрузки расходов по категории:', e);
         container.innerHTML = `<div class="loading">Ошибка: ${e.message}</div>`;
       }
+    }
+
+    function setActiveCategory(name) {
+      activeCategoryName = name;
+      const chips = document.querySelectorAll('.category-chip');
+      chips.forEach((chip) => {
+        if (chip.textContent === name) {
+          chip.classList.add('category-chip-active');
+        } else {
+          chip.classList.remove('category-chip-active');
+        }
+      });
     }
 
     // Сбрасываем режим ввода в обычное состояние (деактивируем поле)
