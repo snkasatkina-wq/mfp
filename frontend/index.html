@@ -24,6 +24,29 @@
       margin-bottom: 20px;
     }
     
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      color: var(--tg-theme-text-color, #000000);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .tab-active {
+      background: var(--tg-theme-button-color, #2a9df4);
+      color: var(--tg-theme-button-text-color, #ffffff);
+    }
+
     h1 {
       font-size: 24px;
       margin: 0 0 8px 0;
@@ -212,12 +235,34 @@
       text-align: center;
       min-height: 16px;
     }
+
+    .categories-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .category-chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      color: var(--tg-theme-text-color, #000000);
+      font-size: 13px;
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>💰 Мои расходы</h1>
     <div class="greeting" id="greeting">Загрузка...</div>
+  </div>
+
+  <div class="tabs">
+    <button id="tab-expenses" class="tab tab-active">Расходы</button>
+    <button id="tab-categories" class="tab">Категории</button>
   </div>
 
   <div class="image-container">
@@ -240,7 +285,7 @@
     <div id="input-hint" class="input-hint"></div>
   </div>
 
-  <div class="expenses-section">
+  <div id="expenses-section" class="expenses-section">
     <div class="section-title">Последние расходы</div>
     <div id="loading" class="loading">Загрузка расходов...</div>
     <div id="expenses"></div>
@@ -248,6 +293,16 @@
       Пока расходов нет.<br>
       Отправь боту расход в формате:<br>
       <strong>сумма // описание // категория</strong>
+    </div>
+  </div>
+
+  <div id="categories-section" class="expenses-section" style="display:none;">
+    <div class="section-title">Категории</div>
+    <div id="categories-list" class="categories-list"></div>
+
+    <div id="category-expenses-wrapper" style="margin-top:16px; display:none;">
+      <div class="section-title" id="category-expenses-title"></div>
+      <div id="category-expenses"></div>
     </div>
   </div>
 
@@ -376,9 +431,36 @@
 
     // Состояние для универсального поля ввода
     let inputMode = 'normal'; // 'normal' | 'waiting_prompt' | 'waiting_categories'
+    let currentTab = 'expenses'; // 'expenses' | 'categories'
+    let categoriesLoaded = false;
     const inputEl = document.getElementById('universal-input');
     const sendBtn = document.getElementById('send-btn');
     const hintEl = document.getElementById('input-hint');
+
+    const expensesSection = document.getElementById('expenses-section');
+    const categoriesSection = document.getElementById('categories-section');
+    const tabExpenses = document.getElementById('tab-expenses');
+    const tabCategories = document.getElementById('tab-categories');
+
+    function switchTab(tab) {
+      currentTab = tab;
+
+      if (tab === 'expenses') {
+        tabExpenses.classList.add('tab-active');
+        tabCategories.classList.remove('tab-active');
+        expensesSection.style.display = '';
+        categoriesSection.style.display = 'none';
+      } else {
+        tabExpenses.classList.remove('tab-active');
+        tabCategories.classList.add('tab-active');
+        expensesSection.style.display = 'none';
+        categoriesSection.style.display = '';
+
+        if (!categoriesLoaded) {
+          loadCategories();
+        }
+      }
+    }
 
     // Обработчик отправки из универсального поля
     async function handleSendInput() {
@@ -608,6 +690,112 @@
       }
     }
 
+    // Загружаем список категорий
+    async function loadCategories() {
+      if (!telegramUserId) {
+        return;
+      }
+
+      const container = document.getElementById('categories-list');
+      const expensesWrapper = document.getElementById('category-expenses-wrapper');
+      const expensesContainer = document.getElementById('category-expenses');
+      const expensesTitle = document.getElementById('category-expenses-title');
+
+      container.innerHTML = 'Загрузка категорий...';
+      expensesWrapper.style.display = 'none';
+      expensesContainer.innerHTML = '';
+      expensesTitle.textContent = '';
+
+      try {
+        const res = await fetch(`/miniapp/categories/list?telegram_user_id=${telegramUserId}`);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+
+        const data = await res.json();
+        categoriesLoaded = true;
+
+        if (!data || data.length === 0) {
+          container.innerHTML = '<div class="loading">Категории пока не созданы. Добавьте их через кнопку «➕ Категории».</div>';
+          return;
+        }
+
+        container.innerHTML = '';
+
+        data.forEach((cat) => {
+          const btn = document.createElement('button');
+          btn.className = 'category-chip';
+          btn.textContent = cat.name;
+          btn.addEventListener('click', () => {
+            loadCategoryExpenses(cat.name);
+          });
+          container.appendChild(btn);
+        });
+      } catch (e) {
+        console.error('Ошибка загрузки категорий:', e);
+        container.innerHTML = '<div class="loading">Ошибка загрузки категорий.</div>';
+      }
+    }
+
+    // Загружаем расходы по выбранной категории
+    async function loadCategoryExpenses(categoryName) {
+      if (!telegramUserId) {
+        return;
+      }
+
+      const wrapper = document.getElementById('category-expenses-wrapper');
+      const container = document.getElementById('category-expenses');
+      const titleEl = document.getElementById('category-expenses-title');
+
+      wrapper.style.display = 'block';
+      container.innerHTML = '<div class="loading">Загрузка расходов по категории...</div>';
+      titleEl.textContent = `Расходы по категории: ${categoryName}`;
+
+      try {
+        const url = `/miniapp/expenses/by-category?telegram_user_id=${telegramUserId}&category_name=${encodeURIComponent(categoryName)}&limit=50`;
+        console.log('Запрос расходов по категории:', url);
+
+        const res = await fetch(url);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+
+        const data = await res.json();
+        container.innerHTML = '';
+
+        if (!data || data.length === 0) {
+          container.innerHTML = '<div class="loading">Расходов в этой категории пока нет.</div>';
+          return;
+        }
+
+        data.forEach((item) => {
+          const div = document.createElement('div');
+          div.className = 'expense';
+
+          const amountRub = (item.amount_cents || 0) / 100;
+          const cat = item.category_name || categoryName || 'Без категории';
+          const desc = item.description || '';
+          const date = item.occurred_at || '';
+
+          div.innerHTML = `
+            <div class="expense-left">
+              <div class="expense-amount">${amountRub.toFixed(2)} ₽</div>
+              <div class="expense-category">${cat}</div>
+              ${desc ? `<div class="expense-description">${desc}</div>` : ''}
+            </div>
+            ${date ? `<div class="expense-date">${date}</div>` : ''}
+          `;
+
+          container.appendChild(div);
+        });
+      } catch (e) {
+        console.error('Ошибка загрузки расходов по категории:', e);
+        container.innerHTML = `<div class="loading">Ошибка: ${e.message}</div>`;
+      }
+    }
+
     // Сбрасываем режим ввода в обычное состояние (деактивируем поле)
     function resetInputMode() {
       inputMode = 'normal';
@@ -808,6 +996,14 @@
     const manageCategoriesBtn = document.getElementById('manage-categories-btn');
     if (manageCategoriesBtn) {
       manageCategoriesBtn.addEventListener('click', startCategoriesInput);
+    }
+
+    // Обработчики вкладок
+    if (tabExpenses) {
+      tabExpenses.addEventListener('click', () => switchTab('expenses'));
+    }
+    if (tabCategories) {
+      tabCategories.addEventListener('click', () => switchTab('categories'));
     }
 
     // Загружаем картинку и расходы при открытии

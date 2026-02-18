@@ -344,6 +344,79 @@ def miniapp_create_categories(
     }
 
 
+@app.get("/miniapp/categories/list", response_class=JSONResponse)
+def miniapp_list_categories(
+    telegram_user_id: int,
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Возвращает все категории пользователя для мини‑приложения."""
+    user = (
+        db.query(User)
+        .filter(User.telegram_user_id == telegram_user_id)
+        .first()
+    )
+
+    if not user:
+        return []
+
+    categories = crud.get_categories(db=db, user_id=user.id)
+    return [
+        {"id": c.id, "name": c.name}
+        for c in categories
+    ]
+
+
+@app.get("/miniapp/expenses/by-category", response_class=JSONResponse)
+def miniapp_expenses_by_category(
+    telegram_user_id: int,
+    category_name: str,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Возвращает расходы пользователя по конкретной категории для мини‑приложения."""
+    # Находим пользователя по telegram_user_id
+    user = (
+        db.query(User)
+        .filter(User.telegram_user_id == telegram_user_id)
+        .first()
+    )
+
+    if not user:
+        return []
+
+    rows = (
+        db.execute(
+            text(
+                """
+            SELECT e.id,
+                   e.amount_cents,
+                   e.description,
+                   e.occurred_at,
+                   c.name AS category_name
+            FROM expenses e
+            LEFT JOIN categories c ON c.id = e.category_id
+            WHERE e.user_id = :user_id
+              AND c.name = :category_name
+            ORDER BY e.occurred_at DESC, e.id DESC
+            LIMIT :limit
+            """
+            ),
+            {"user_id": user.id, "category_name": category_name, "limit": limit},
+        )
+        .mappings()
+        .all()
+    )
+
+    result: list[dict[str, Any]] = []
+    for r in rows:
+        item = dict(r)
+        occurred = item.get("occurred_at")
+        if isinstance(occurred, datetime):
+            item["occurred_at"] = occurred.strftime("%d.%m.%Y %H:%M")
+        result.append(item)
+    return result
+
+
 class GenerateImageRequest(BaseModel):
     """Запрос на генерацию картинки с промптом от пользователя."""
     prompt: str
