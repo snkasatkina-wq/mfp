@@ -34,6 +34,10 @@ frontend/user_images/*.jpeg
 frontend/user_images/*.webp
 !frontend/user_images/.gitkeep
 
+# Receipts (user-uploaded files)
+backend/receipts/**/*
+!backend/receipts/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db

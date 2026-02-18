@@ -16,7 +16,7 @@ import asyncio
 import os
 from typing import Optional, Any
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -27,6 +27,7 @@ from .database import SessionLocal, init_db
 from . import crud
 from .models import User
 from . import image_generation
+from . import receipt_processing
 
 app = FastAPI(title="Expense Tracker Backend", version="0.1.0")
 
@@ -415,6 +416,192 @@ def miniapp_expenses_by_category(
             item["occurred_at"] = occurred.strftime("%d.%m.%Y %H:%M")
         result.append(item)
     return result
+
+
+@app.post("/miniapp/receipts", response_class=JSONResponse)
+async def upload_receipt(
+    telegram_user_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Обрабатывает загруженный чек: парсит через OpenAI Vision, категоризирует позиции и создаёт расходы.
+    
+    Логика:
+    1. Находит пользователя по telegram_user_id.
+    2. Сохраняет файл чека на сервер.
+    3. Парсит чек через OpenAI Vision (извлекает позиции и суммы).
+    4. Получает список категорий пользователя (включая "не определено").
+    5. Для каждой позиции определяет категорию через OpenAI Chat.
+    6. Создаёт запись в таблице receipts.
+    7. Создаёт записи расходов в таблице expenses для каждой позиции.
+    
+    Returns:
+        {"ok": True, "created": N} где N — количество созданных расходов.
+    """
+    import uuid
+    
+    # Находим пользователя
+    user = crud.get_user_by_telegram_id(db=db, telegram_user_id=telegram_user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    
+    # Проверяем формат файла
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Файл должен быть изображением (jpg, png, webp и т.д.)"
+        )
+    
+    # Определяем MIME-тип для OpenAI
+    mime_type = file.content_type
+    if mime_type == "image/jpg":
+        mime_type = "image/jpeg"
+    
+    # Генерируем уникальный receipt_group_id
+    receipt_group_id = str(uuid.uuid4())
+    
+    # Определяем путь для сохранения файла
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    RECEIPTS_DIR = BASE_DIR / "backend" / "receipts" / str(user.id)
+    RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Определяем расширение файла
+    file_ext = Path(file.filename or "receipt.jpg").suffix
+    if not file_ext:
+        file_ext = ".jpg"
+    
+    file_path = RECEIPTS_DIR / f"{receipt_group_id}{file_ext}"
+    
+    # Сохраняем файл
+    try:
+        file_bytes = await file.read()
+        file_path.write_bytes(file_bytes)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка сохранения файла: {str(e)}"
+        )
+    
+    # Относительный путь для БД (от корня проекта)
+    relative_file_path = f"backend/receipts/{user.id}/{receipt_group_id}{file_ext}"
+    
+    # Получаем API ключ OpenAI
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY не настроен"
+        )
+    
+    client = OpenAI(api_key=openai_api_key)
+    
+    # Загружаем промпты
+    parsing_prompt = receipt_processing.load_receipt_parsing_prompt()
+    classification_prompt = receipt_processing.load_category_classification_prompt()
+    
+    # Парсим чек
+    try:
+        parsed_result = receipt_processing.parse_receipt_image(
+            client=client,
+            prompt_text=parsing_prompt,
+            image_bytes=file_bytes,
+            mime_type=mime_type,
+        )
+    except Exception as e:
+        # Удаляем сохранённый файл при ошибке парсинга
+        try:
+            file_path.unlink()
+        except:
+            pass
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка парсинга чека: {str(e)}"
+        )
+    
+    items = parsed_result.get("items", [])
+    if not items:
+        # Удаляем сохранённый файл, если позиций не найдено
+        try:
+            file_path.unlink()
+        except:
+            pass
+        raise HTTPException(
+            status_code=400,
+            detail="На чеке не найдено позиций для обработки"
+        )
+    
+    # Получаем категории пользователя (включая "не определено")
+    categories = crud.get_categories(db=db, user_id=user.id)
+    category_names = [c.name for c in categories]
+    
+    # Убеждаемся, что категория "не определено" существует
+    if "не определено" not in category_names:
+        crud.get_or_create_category(db=db, user_id=user.id, name="не определено")
+        category_names.append("не определено")
+    
+    # Классифицируем каждую позицию и создаём расходы
+    created_count = 0
+    current_time = datetime.now()
+    
+    try:
+        for item in items:
+            item_name = item.get("name", item.get("raw_name", "Неизвестная позиция"))
+            total_price = float(item.get("total_price", 0.0))
+            
+            if total_price <= 0:
+                continue  # Пропускаем позиции с нулевой или отрицательной ценой
+            
+            # Определяем категорию
+            try:
+                category_name = receipt_processing.classify_item(
+                    client=client,
+                    prompt_text=classification_prompt,
+                    item_name=item_name,
+                    categories=category_names,
+                )
+                # Проверяем, что категория действительно в списке
+                if category_name not in category_names:
+                    category_name = "не определено"
+            except Exception as e:
+                # В случае ошибки категоризации используем "не определено"
+                category_name = "не определено"
+            
+            # Создаём расход
+            amount_cents = int(round(total_price * 100))
+            crud.create_expense_from_receipt_item(
+                db=db,
+                user_id=user.id,
+                amount_cents=amount_cents,
+                description=item_name,
+                category_name=category_name,
+                receipt_group_id=receipt_group_id,
+                occurred_at=current_time,
+            )
+            created_count += 1
+        
+        # Создаём запись о чеке в таблице receipts
+        crud.create_receipt(
+            db=db,
+            user_id=user.id,
+            receipt_group_id=receipt_group_id,
+            file_path=relative_file_path,
+        )
+        
+        return {
+            "ok": True,
+            "created": created_count,
+        }
+        
+    except Exception as e:
+        # В случае ошибки удаляем сохранённый файл
+        try:
+            file_path.unlink()
+        except:
+            pass
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка обработки чека: {str(e)}"
+        )
 
 
 class GenerateImageRequest(BaseModel):

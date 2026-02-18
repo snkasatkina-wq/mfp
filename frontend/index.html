@@ -1035,17 +1035,60 @@
         uploadReceiptInput.click();
       });
 
-      uploadReceiptInput.addEventListener('change', () => {
+      uploadReceiptInput.addEventListener('change', async () => {
         if (!uploadReceiptInput.files || uploadReceiptInput.files.length === 0) {
           return;
         }
+        
+        if (!telegramUserId) {
+          alert('Ошибка: не удалось определить пользователя');
+          return;
+        }
+        
         const file = uploadReceiptInput.files[0];
         console.log('Выбран файл чека:', file);
-        // TODO: отправить файл на бэкенд для обработки
-        // Пока считаем, что чек успешно обработан
-        hintEl.textContent = 'Чек обработан. Обновляю список расходов...';
-        // Перезагружаем список расходов
-        loadExpenses();
+        
+        // Показываем сообщение о загрузке
+        hintEl.textContent = 'Обработка чека...';
+        
+        try {
+          // Создаём FormData с файлом
+          const formData = new FormData();
+          formData.append('file', file);
+          
+          // Отправляем файл на бэкенд
+          const res = await fetch(`/miniapp/receipts?telegram_user_id=${telegramUserId}`, {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`HTTP ${res.status}: ${errorText}`);
+          }
+          
+          const data = await res.json();
+          
+          if (data.ok && data.created > 0) {
+            hintEl.textContent = `Чек обработан. Создано расходов: ${data.created}. Обновляю список...`;
+            // Перезагружаем список расходов
+            await loadExpenses();
+            // Очищаем поле ввода файла
+            uploadReceiptInput.value = '';
+            // Скрываем сообщение через 2 секунды
+            setTimeout(() => {
+              hintEl.textContent = '';
+            }, 2000);
+          } else {
+            throw new Error('Чек обработан, но расходы не созданы');
+          }
+        } catch (e) {
+          console.error('Ошибка обработки чека:', e);
+          hintEl.textContent = '';
+          alert(`Ошибка обработки чека: ${e.message}`);
+          // Очищаем поле ввода файла
+          uploadReceiptInput.value = '';
+        }
       });
     }
 

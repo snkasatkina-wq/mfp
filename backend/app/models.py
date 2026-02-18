@@ -164,3 +164,23 @@ class ChatDeviceLink(Base):
     )
     # Технический идентификатор устройства (device_id), к которому привязан чат
     device_id: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class Receipt(Base):
+    __tablename__ = "receipts"
+
+    # Идентификатор записи чека
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Пользователь, которому принадлежит чек
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Уникальный идентификатор группы чека (для связи с несколькими расходами)
+    receipt_group_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    # Путь к сохранённому файлу чека на сервере
+    file_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Дата/время загрузки чека
+    uploaded_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=False), server_default=func.now(), nullable=False
+    )

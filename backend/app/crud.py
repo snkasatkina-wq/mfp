@@ -16,7 +16,7 @@ from typing import Sequence
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal
-from .models import User, Category, Subcategory, Expense, ChatDeviceLink
+from .models import User, Category, Subcategory, Expense, ChatDeviceLink, Receipt
 
 
 # ---------- Общая функция для сессий ----------
@@ -269,3 +269,74 @@ def update_user_custom_image_path(
     db.commit()
     db.refresh(user)
     return user
+
+
+def get_user_by_telegram_id(
+    db: Session,
+    telegram_user_id: int,
+) -> User | None:
+    """Находит пользователя по telegram_user_id (для мини-приложения).
+    
+    В мини-приложении у нас есть только telegram_user_id, без chat_id.
+    """
+    user = (
+        db.query(User)
+        .filter(User.telegram_user_id == telegram_user_id)
+        .first()
+    )
+    return user
+
+
+# ---------- Чеки ----------
+
+def create_receipt(
+    db: Session,
+    user_id: int,
+    receipt_group_id: str,
+    file_path: str,
+) -> Receipt:
+    """Создаёт запись о загруженном чеке в таблице receipts."""
+    receipt = Receipt(
+        user_id=user_id,
+        receipt_group_id=receipt_group_id,
+        file_path=file_path,
+    )
+    db.add(receipt)
+    db.commit()
+    db.refresh(receipt)
+    return receipt
+
+
+def create_expense_from_receipt_item(
+    db: Session,
+    user_id: int,
+    amount_cents: int,
+    description: str,
+    category_name: str,
+    receipt_group_id: str,
+    occurred_at,
+) -> Expense:
+    """Создаёт расход из позиции чека (без подкатегории).
+    
+    Параметр `occurred_at` ожидается как объект `datetime`.
+    """
+    category = get_or_create_category(
+        db=db,
+        user_id=user_id,
+        name=category_name,
+    )
+
+    expense = Expense(
+        user_id=user_id,
+        category_id=category.id,
+        subcategory_id=None,
+        amount_cents=amount_cents,
+        description=description,
+        occurred_at=occurred_at,
+        source="receipt",
+        receipt_group_id=receipt_group_id,
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    return expense
