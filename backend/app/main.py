@@ -32,6 +32,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+from openai import OpenAI
+
 from .database import SessionLocal, init_db
 from . import crud
 from .models import User
