@@ -15,18 +15,30 @@ from typing import Any
 from openai import OpenAI
 
 
+def _project_root() -> Path:
+    """Корень проекта (родитель backend/)."""
+    return Path(__file__).resolve().parents[2]
+
+
 def load_receipt_parsing_prompt() -> str:
     """Читает промпт для парсинга чеков из файла чеки/prompt_receipt_parsing.md."""
-    # Ищем промпт относительно корня проекта
-    project_root = Path(__file__).resolve().parents[2]
-    prompt_path = project_root / "чеки" / "prompt_receipt_parsing.md"
+    prompt_path = _project_root() / "чеки" / "prompt_receipt_parsing.md"
+    if not prompt_path.exists():
+        raise FileNotFoundError(
+            f"Файл промпта не найден: {prompt_path}. "
+            "Убедитесь, что папка чеки с файлами prompt_*.md развёрнута на сервере (git add чеки/ и push)."
+        )
     return prompt_path.read_text(encoding="utf-8")
 
 
 def load_category_classification_prompt() -> str:
     """Читает промпт для категоризации расходов из файла чеки/prompt_category_classification.md."""
-    project_root = Path(__file__).resolve().parents[2]
-    prompt_path = project_root / "чеки" / "prompt_category_classification.md"
+    prompt_path = _project_root() / "чеки" / "prompt_category_classification.md"
+    if not prompt_path.exists():
+        raise FileNotFoundError(
+            f"Файл промпта не найден: {prompt_path}. "
+            "Убедитесь, что папка чеки с файлами prompt_*.md развёрнута на сервере (git add чеки/ и push)."
+        )
     return prompt_path.read_text(encoding="utf-8")
 
 

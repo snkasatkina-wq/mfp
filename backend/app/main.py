@@ -622,6 +622,7 @@ async def upload_receipt(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # запрет буферизации в nginx для SSE
         }
     )
 
