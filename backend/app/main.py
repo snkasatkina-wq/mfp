@@ -10,11 +10,20 @@
 
 from datetime import datetime
 from pathlib import Path
+import logging
 import secrets
 import time
 import asyncio
 import os
 from typing import Optional, Any
+
+logger = logging.getLogger(__name__)
+# Чтобы сообщения [receipt] попадали в journalctl при запуске через uvicorn
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.INFO)
 
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -493,6 +502,7 @@ async def upload_receipt(
             
             # Статус: чек загружен
             yield f"data: {json_lib.dumps({'status': 'uploaded', 'message': 'Чек загружен'})}\n\n"
+            logger.info("[receipt] Чек загружен, начинаю распознавание")
             
             # Относительный путь для БД (от корня проекта)
             relative_file_path = f"backend/receipts/{user.id}/{receipt_group_id}{file_ext}"
@@ -506,11 +516,18 @@ async def upload_receipt(
             client = OpenAI(api_key=openai_api_key)
             
             # Загружаем промпты
-            parsing_prompt = receipt_processing.load_receipt_parsing_prompt()
-            classification_prompt = receipt_processing.load_category_classification_prompt()
+            try:
+                parsing_prompt = receipt_processing.load_receipt_parsing_prompt()
+                classification_prompt = receipt_processing.load_category_classification_prompt()
+                logger.info("[receipt] Промпты загружены")
+            except Exception as e:
+                logger.exception("[receipt] Ошибка загрузки промптов: %s", e)
+                yield f"data: {json_lib.dumps({'status': 'error', 'message': f'Ошибка загрузки промптов: {str(e)}'})}\n\n"
+                return
             
             # Парсим чек
             try:
+                logger.info("[receipt] Вызов OpenAI Vision...")
                 parsed_result = receipt_processing.parse_receipt_image(
                     client=client,
                     prompt_text=parsing_prompt,
@@ -518,6 +535,7 @@ async def upload_receipt(
                     mime_type=mime_type,
                 )
             except Exception as e:
+                logger.exception("[receipt] Ошибка парсинга чека (OpenAI Vision): %s", e)
                 # Удаляем сохранённый файл при ошибке парсинга
                 try:
                     file_path.unlink()
@@ -526,6 +544,7 @@ async def upload_receipt(
                 yield f"data: {json_lib.dumps({'status': 'error', 'message': f'Ошибка парсинга чека: {str(e)}'})}\n\n"
                 return
             
+            logger.info("[receipt] Чек распознан, позиций: %s", len(parsed_result.get("items", [])))
             # Статус: чек распознан
             yield f"data: {json_lib.dumps({'status': 'parsed', 'message': 'Чек распознан'})}\n\n"
             
@@ -611,6 +630,7 @@ async def upload_receipt(
                 yield f"data: {json_lib.dumps({'status': 'error', 'message': f'Ошибка обработки чека: {str(e)}'})}\n\n"
                 
         except Exception as e:
+            logger.exception("[receipt] Неожиданная ошибка в генераторе: %s", e)
             yield f"data: {json_lib.dumps({'status': 'error', 'message': f'Неожиданная ошибка: {str(e)}'})}\n\n"
         finally:
             # Закрываем сессию БД
