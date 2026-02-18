@@ -114,6 +114,21 @@ class ExpenseCreateRequest(BaseModel):
     occurred_at: str | None = None  # формат "DD.MM.YYYY HH:MM" или None
 
 
+class GenerateImageRequest(BaseModel):
+    """Запрос на генерацию картинки с промптом от пользователя."""
+
+    prompt: str
+
+
+class MiniappCategoriesRequest(BaseModel):
+    """Запрос на создание категорий из мини‑приложения.
+
+    Поле `categories` — одна строка с перечислением категорий через запятую.
+    """
+
+    categories: str
+
+
 # ===================== Health =====================
 
 @app.get("/health")
@@ -267,6 +282,65 @@ def get_user_image(
     return {
         "image_url": "/static/piggy.png",
         "is_custom": False,
+    }
+
+
+@app.post("/miniapp/categories", response_class=JSONResponse)
+def miniapp_create_categories(
+    telegram_user_id: int,
+    payload: MiniappCategoriesRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Создаёт категории для пользователя из мини‑приложения.
+
+    Пользователь передаёт строку с категориями, разделёнными запятыми.
+    По умолчанию также создаётся категория «не определено».
+    """
+    # Находим пользователя по telegram_user_id
+    user = (
+        db.query(User)
+        .filter(User.telegram_user_id == telegram_user_id)
+        .first()
+    )
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Гарантируем наличие базовой категории «не определено»
+    base_category_name = "не определено"
+    crud.get_or_create_category(
+        db=db,
+        user_id=user.id,
+        name=base_category_name,
+    )
+
+    raw = (payload.categories or "").strip()
+    if not raw:
+        raise HTTPException(
+            status_code=400,
+            detail="Строка категорий пуста",
+        )
+
+    parts = [p.strip() for p in raw.split(",")]
+    created_or_existing: list[str] = []
+
+    for name in parts:
+        if not name:
+            continue
+        # Не дублируем базовую категорию, она уже создана выше
+        if name.lower() == base_category_name.lower():
+            continue
+
+        cat = crud.get_or_create_category(
+            db=db,
+            user_id=user.id,
+            name=name,
+        )
+        created_or_existing.append(cat.name)
+
+    return {
+        "ok": True,
+        "categories": created_or_existing or [base_category_name],
     }
 
 
