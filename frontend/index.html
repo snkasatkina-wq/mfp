@@ -1048,15 +1048,15 @@
         const file = uploadReceiptInput.files[0];
         console.log('Выбран файл чека:', file);
         
-        // Показываем сообщение о загрузке
-        hintEl.textContent = 'Обработка чека...';
+        // Показываем начальное сообщение
+        hintEl.textContent = 'Чек загружается...';
         
         try {
           // Создаём FormData с файлом
           const formData = new FormData();
           formData.append('file', file);
           
-          // Отправляем файл на бэкенд
+          // Отправляем файл на бэкенд и читаем поток статусов
           const res = await fetch(`/miniapp/receipts?telegram_user_id=${telegramUserId}`, {
             method: 'POST',
             body: formData,
@@ -1067,21 +1067,65 @@
             throw new Error(`HTTP ${res.status}: ${errorText}`);
           }
           
-          const data = await res.json();
+          // Читаем поток Server-Sent Events
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let createdCount = 0;
           
-          if (data.ok && data.created > 0) {
-            hintEl.textContent = `Чек обработан. Создано расходов: ${data.created}. Обновляю список...`;
-            // Перезагружаем список расходов
-            await loadExpenses();
-            // Очищаем поле ввода файла
-            uploadReceiptInput.value = '';
-            // Скрываем сообщение через 2 секунды
-            setTimeout(() => {
-              hintEl.textContent = '';
-            }, 2000);
-          } else {
-            throw new Error('Чек обработан, но расходы не созданы');
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+              break;
+            }
+            
+            // Декодируем полученные данные
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Обрабатываем все полные сообщения (формат SSE: "data: {...}\n\n")
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Оставляем неполную строку в буфере
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const jsonStr = line.substring(6); // Убираем "data: "
+                  const data = JSON.parse(jsonStr);
+                  
+                  // Обновляем статус в зависимости от этапа обработки
+                  switch (data.status) {
+                    case 'uploaded':
+                      hintEl.textContent = 'Чек загружен';
+                      break;
+                    case 'parsed':
+                      hintEl.textContent = 'Чек распознан';
+                      break;
+                    case 'categories_ready':
+                      hintEl.textContent = 'Категории определены';
+                      break;
+                    case 'completed':
+                      createdCount = data.created || 0;
+                      hintEl.textContent = `Расходы внесены в базу (${createdCount} шт.)`;
+                      // Перезагружаем список расходов
+                      await loadExpenses();
+                      // Очищаем поле ввода файла
+                      uploadReceiptInput.value = '';
+                      // Скрываем сообщение через 3 секунды
+                      setTimeout(() => {
+                        hintEl.textContent = '';
+                      }, 3000);
+                      break;
+                    case 'error':
+                      throw new Error(data.message || 'Ошибка обработки чека');
+                  }
+                } catch (e) {
+                  console.error('Ошибка парсинга статуса:', e);
+                }
+              }
+            }
           }
+          
         } catch (e) {
           console.error('Ошибка обработки чека:', e);
           hintEl.textContent = '';
