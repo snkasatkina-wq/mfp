@@ -251,6 +251,9 @@
       border: none;
       cursor: pointer;
       white-space: nowrap;
+      display: inline-flex;
+      width: auto;
+      margin-top: 0;
     }
 
     .category-chip-active {
@@ -274,6 +277,13 @@
     <img id="user-image" src="/static/piggy.png" alt="Копилка" />
     <button id="generate-image-btn" class="generate-btn">🎨 Сгенерировать картинку</button>
     <button id="manage-categories-btn" class="generate-btn">➕ Категории</button>
+    <button id="upload-receipt-btn" class="generate-btn">📷 Загрузить чек</button>
+    <input
+      id="upload-receipt-input"
+      type="file"
+      accept="image/*"
+      style="display:none"
+    />
   </div>
 
   <div class="input-section">
@@ -1015,6 +1025,25 @@
     const manageCategoriesBtn = document.getElementById('manage-categories-btn');
     if (manageCategoriesBtn) {
       manageCategoriesBtn.addEventListener('click', startCategoriesInput);
+    }
+
+    // Кнопка загрузки чека (пока только открывает файловый диалог)
+    const uploadReceiptBtn = document.getElementById('upload-receipt-btn');
+    const uploadReceiptInput = document.getElementById('upload-receipt-input');
+    if (uploadReceiptBtn && uploadReceiptInput) {
+      uploadReceiptBtn.addEventListener('click', () => {
+        uploadReceiptInput.click();
+      });
+
+      uploadReceiptInput.addEventListener('change', () => {
+        if (!uploadReceiptInput.files || uploadReceiptInput.files.length === 0) {
+          return;
+        }
+        const file = uploadReceiptInput.files[0];
+        console.log('Выбран файл чека:', file);
+        hintEl.textContent = 'Чек выбран, обработка загрузки будет реализована позже.';
+        // Здесь позже добавим отправку файла на бэкенд
+      });
     }
 
     // Обработчики вкладок
