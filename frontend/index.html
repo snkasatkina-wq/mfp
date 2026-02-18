@@ -1072,57 +1072,78 @@
           const decoder = new TextDecoder();
           let buffer = '';
           let createdCount = 0;
+          let hasError = false;
           
-          while (true) {
-            const { done, value } = await reader.read();
-            
-            if (done) {
-              break;
-            }
-            
-            // Декодируем полученные данные
-            buffer += decoder.decode(value, { stream: true });
-            
-            // Обрабатываем все полные сообщения (формат SSE: "data: {...}\n\n")
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Оставляем неполную строку в буфере
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const jsonStr = line.substring(6); // Убираем "data: "
-                  const data = JSON.parse(jsonStr);
-                  
-                  // Обновляем статус в зависимости от этапа обработки
-                  switch (data.status) {
-                    case 'uploaded':
-                      hintEl.textContent = 'Чек загружен';
-                      break;
-                    case 'parsed':
-                      hintEl.textContent = 'Чек распознан';
-                      break;
-                    case 'categories_ready':
-                      hintEl.textContent = 'Категории определены';
-                      break;
-                    case 'completed':
-                      createdCount = data.created || 0;
-                      hintEl.textContent = `Расходы внесены в базу (${createdCount} шт.)`;
-                      // Перезагружаем список расходов
-                      await loadExpenses();
-                      // Очищаем поле ввода файла
-                      uploadReceiptInput.value = '';
-                      // Скрываем сообщение через 3 секунды
-                      setTimeout(() => {
-                        hintEl.textContent = '';
-                      }, 3000);
-                      break;
-                    case 'error':
-                      throw new Error(data.message || 'Ошибка обработки чека');
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              
+              if (done) {
+                // Если поток закончился, но не было статуса 'completed' или 'error', это ошибка
+                if (!hasError && hintEl.textContent === 'Чек загружен') {
+                  throw new Error('Соединение прервано. Проверьте логи сервера.');
+                }
+                break;
+              }
+              
+              // Декодируем полученные данные
+              buffer += decoder.decode(value, { stream: true });
+              
+              // Обрабатываем все полные сообщения (формат SSE: "data: {...}\n\n")
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || ''; // Оставляем неполную строку в буфере
+              
+              for (const line of lines) {
+                if (line.trim() === '') continue; // Пропускаем пустые строки
+                
+                if (line.startsWith('data: ')) {
+                  try {
+                    const jsonStr = line.substring(6).trim(); // Убираем "data: " и пробелы
+                    if (!jsonStr) continue; // Пропускаем пустые данные
+                    
+                    const data = JSON.parse(jsonStr);
+                    
+                    // Обновляем статус в зависимости от этапа обработки
+                    switch (data.status) {
+                      case 'uploaded':
+                        hintEl.textContent = 'Чек загружен';
+                        break;
+                      case 'parsed':
+                        hintEl.textContent = 'Чек распознан';
+                        break;
+                      case 'categories_ready':
+                        hintEl.textContent = 'Категории определены';
+                        break;
+                      case 'completed':
+                        hasError = false;
+                        createdCount = data.created || 0;
+                        hintEl.textContent = `Расходы внесены в базу (${createdCount} шт.)`;
+                        // Перезагружаем список расходов
+                        await loadExpenses();
+                        // Очищаем поле ввода файла
+                        uploadReceiptInput.value = '';
+                        // Скрываем сообщение через 3 секунды
+                        setTimeout(() => {
+                          hintEl.textContent = '';
+                        }, 3000);
+                        break;
+                      case 'error':
+                        hasError = true;
+                        throw new Error(data.message || 'Ошибка обработки чека');
+                    }
+                  } catch (e) {
+                    if (e.message && e.message.includes('Ошибка обработки чека')) {
+                      throw e; // Пробрасываем ошибку обработки дальше
+                    }
+                    console.error('Ошибка парсинга статуса:', e, 'Строка:', line);
                   }
-                } catch (e) {
-                  console.error('Ошибка парсинга статуса:', e);
                 }
               }
+            }
+          } catch (streamError) {
+            if (!hasError) {
+              console.error('Ошибка чтения потока:', streamError);
+              throw streamError;
             }
           }
           
